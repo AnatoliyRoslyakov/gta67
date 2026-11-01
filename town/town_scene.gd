@@ -23,21 +23,10 @@ var ambient_sound: Array = [
 # This is used to darken the sunlight to compensate for sRGB blending (without affecting sky rendering).
 var compatibility_light: DirectionalLight3D
 
-var player_body: VehicleBody3D
-var spawn_transform := Transform3D.IDENTITY
-
 
 func setup(car: Node3D, back_callback: Callable, sdfgi: bool) -> void:
-	# Remove the map's presentation lighting and reserve a parked car's road position.
-	for path in ["Camera", "WorldEnvironment", "Directional Light", "ReflectionProbe"]:
-		$CityMap.get_node(path).free()
-	for node in $CityMap/Environment.get_children():
-		if "Skydome" in str(node.name):
-			node.free()
-	$CityMap/Road_Cars/SM_Veh_Car_Sedan_01.free()
 	# A car scene may have vehicles.
 	var car_body: VehicleBody3D = car.get_child(0)
-	player_body = car_body
 
 	car_body.turbometer = %Turbometer
 	car_body.turbo_animator = %TurboAnimator
@@ -49,7 +38,6 @@ func setup(car: Node3D, back_callback: Callable, sdfgi: bool) -> void:
 
 
 func _ready() -> void:
-	spawn_transform = %InstancePos.global_transform
 	# Ensure headlights are toggled on automatically according to the initial mood.
 	# The scene tree is not available at first, so we have to set the mood a second time
 	# in deferred mode, which will call the setter again.
@@ -72,25 +60,8 @@ func _ready() -> void:
 			headlight.shadow_reverse_cull_face = true
 
 
-func _physics_process(_delta: float) -> void:
-	if player_body.global_position.y < -10.0:
-		reset_vehicle()
-
-
-func reset_vehicle() -> void:
-	player_body.global_transform = spawn_transform
-	player_body.linear_velocity = Vector3.ZERO
-	player_body.angular_velocity = Vector3.ZERO
-	player_body.constant_force = Vector3.ZERO
-	player_body.sleeping = false
-	player_body.reset_physics_interpolation()
-	player_body.get_node("CameraBase/Camera3D").update_camera()
-
-
 func _input(input_event: InputEvent) -> void:
-	if input_event.is_action_pressed(&"reset_vehicle"):
-		reset_vehicle()
-	elif input_event.is_action_pressed(&"cycle_mood"):
+	if input_event.is_action_pressed(&"cycle_mood"):
 		mood = wrapi(mood + 1, 0, Mood.size()) as Mood
 		$AmbientSound.play()
 		for l: Node3D in $Lamps.get_children():

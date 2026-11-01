@@ -10,11 +10,11 @@ config_version=5
 
 [application]
 
-config/name="GTA67"
-config/version="1.0.0"
-config/description="POLYGON City with Truck Town vehicle physics."
-config/tags=PackedStringArray("3d", "demo", "official", "physics", "vehicle")
-run/main_scene="res://car_select/car_select.tscn"
+config/name="Coastline 67"
+config/version="0.0.1"
+config/description="An original tropical city sandbox built with Godot geometry and Truck Town vehicle physics."
+config/tags=PackedStringArray("3d", "sandbox", "driving", "city")
+run/main_scene="res://game/coastline.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.webp"
 

@@ -57,7 +57,7 @@ func _physics_process(delta: float) -> void:
 		constant_force = Vector3()
 
 	# Automatically accelerate when using touch controls (reversing overrides acceleration).
-	if DisplayServer.is_touchscreen_available() or Input.is_action_pressed(&"accelerate"):
+	if Input.is_action_pressed(&"accelerate"):
 		# Increase engine force at low speeds to make the initial acceleration faster.
 		var speed := linear_velocity.length()
 		if speed < 5.0 and not is_zero_approx(speed):
@@ -103,7 +103,7 @@ func _input(p_input_event: InputEvent) -> void:
 
 
 func toggle_headlights() -> void:
-	for node: Light3D in get_tree().get_nodes_in_group(&"headlight"):
+	for node: Light3D in [$HeadlightL, $HeadlightR]:
 		# Consider headlights as being inactive up to this point if their energy was previously 0.
 		headlights_active = is_zero_approx(node.light_energy)
 		var t := get_tree().create_tween()

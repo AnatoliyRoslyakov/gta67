@@ -2,18 +2,7 @@ extends Control
 
 var audio_master: int = AudioServer.get_bus_index("Master")
 
-const VEHICLES := [
-	["Sedan", "Sedan", 3000.0],
-	["Muscle", "Muscle", 4200.0],
-	["Compact", "Small", 2600.0],
-	["Hatchback", "Medium", 2800.0],
-	["Taxi", "Taxi", 3000.0],
-	["Police", "Police", 3800.0],
-	["Van", "Van", 2800.0],
-	["Ambulance", "Ambo", 3000.0],
-]
-
-@onready var car_container: GridContainer = %CarContainer
+@onready var car_container: HBoxContainer = %CarContainer
 
 @onready var button_sunrise: CheckBox = %Sunrise
 @onready var button_day: CheckBox = %Day
@@ -29,14 +18,6 @@ const VEHICLES := [
 var town: Node3D = null
 
 func _ready() -> void:
-	for vehicle in VEHICLES:
-		var button := Button.new()
-		button.text = vehicle[0]
-		button.custom_minimum_size = Vector2(190, 68)
-		button.pressed.connect(_load_vehicle.bind(vehicle))
-		car_container.add_child(button)
-	car_container.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	car_container.position.y -= 40
 	# Automatically focus the first item for gamepad accessibility.
 	focus_first_car()
 
@@ -56,18 +37,13 @@ func focus_first_car() -> void:
 	car_container.get_child(0).grab_focus.call_deferred()
 
 
-func _load_vehicle(vehicle: Array) -> void:
+func _load_scene(car_scene: PackedScene) -> void:
 	# Show loading screen and wait for it to be rendered
 	loading_screen.visible = true
-	await get_tree().process_frame
-	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
 
-	var car: Node3D = preload("res://vehicles/car_base.tscn").instantiate()
+	var car: Node3D = car_scene.instantiate()
 	car.name = "car"
-	var body := car.get_child(0) as VehicleBody3D
-	body.set_script(preload("res://vehicles/polygon_vehicle.gd"))
-	body.vehicle_scene = load("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle[1])
-	body.engine_force_value = vehicle[2]
 	town = preload("res://town/town_scene.tscn").instantiate()
 
 	if button_sunrise.button_pressed:
@@ -96,6 +72,18 @@ func _on_back_pressed() -> void:
 	else:
 		# In main menu, exit the game.
 		get_tree().quit()
+
+
+func _on_mini_van_pressed() -> void:
+	_load_scene(preload("res://vehicles/car_base.tscn"))
+
+
+func _on_trailer_truck_pressed() -> void:
+	_load_scene(preload("res://vehicles/trailer_truck.tscn"))
+
+
+func _on_tow_truck_pressed() -> void:
+	_load_scene(preload("res://vehicles/tow_truck.tscn"))
 
 
 func _on_mute_toggled(muted: bool) -> void:

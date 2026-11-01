@@ -1,8 +1,12 @@
 [gd_scene format=3 uid="uid://cgq7v1pxgrqtq"]
 
 [ext_resource type="Script" uid="uid://b6oqxg642iyvi" path="res://car_select/car_select.gd" id="1_jrgrs"]
+[ext_resource type="Texture2D" uid="uid://ppxannqo6rtg" path="res://car_select/choose_van.png" id="2_8injy"]
+[ext_resource type="Texture2D" uid="uid://ieqt5ql863tb" path="res://car_select/choose_trailer.png" id="3_uu0k4"]
+[ext_resource type="Texture2D" uid="uid://ci5uqy6ljstal" path="res://car_select/choose_tow.png" id="4_y5qrv"]
 [ext_resource type="Texture2D" uid="uid://cjmg136aa35d7" path="res://car_select/audio_on.png" id="5_8injy"]
 [ext_resource type="Texture2D" uid="uid://eu0i3m0c3kki" path="res://car_select/audio_off.png" id="6_uu0k4"]
+[ext_resource type="Texture2D" uid="uid://7imikkhjt0t" path="res://trucktown.png" id="7_uu0k4"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_lcrm3"]
 
@@ -33,16 +37,24 @@ corner_detail = 5
 [sub_resource type="LabelSettings" id="LabelSettings_8injy"]
 font_size = 22
 
-[node name="CarSelect" type="Control"]
+[node name="CarSelect" type="Control" unique_id=278128104]
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -512.0
+offset_top = -300.0
+offset_right = 512.0
+offset_bottom = 300.0
 grow_horizontal = 2
 grow_vertical = 2
+size_flags_horizontal = 2
+size_flags_vertical = 2
 script = ExtResource("1_jrgrs")
 
-[node name="CarContainer" type="GridContainer" parent="." unique_id=741482576]
+[node name="CarContainer" type="HBoxContainer" parent="." unique_id=741482576]
 unique_name_in_owner = true
 layout_mode = 0
 anchor_top = 0.5
@@ -50,24 +62,25 @@ anchor_right = 1.0
 anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
-columns = 4
+alignment = 1
 
-[node name="Title" type="Label" parent="."]
-layout_mode = 0
-anchor_top = 0.14
-anchor_right = 1.0
-anchor_bottom = 0.14
-theme_override_font_sizes/font_size = 40
-text = "GTA67 / POLYGON CITY"
-horizontal_alignment = 1
+[node name="MiniVan" type="Button" parent="CarContainer" unique_id=1052280894]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+icon = ExtResource("2_8injy")
 
-[node name="Subtitle" type="Label" parent="."]
-layout_mode = 0
-anchor_top = 0.25
-anchor_right = 1.0
-anchor_bottom = 0.25
-text = "v1.0.0   ·   Truck Town   ·   Choose your vehicle"
-horizontal_alignment = 1
+[node name="TrailerTruck" type="Button" parent="CarContainer" unique_id=1750997618]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+icon = ExtResource("3_uu0k4")
+
+[node name="TowTruck" type="Button" parent="CarContainer" unique_id=1979324274]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+icon = ExtResource("4_y5qrv")
 
 [node name="MoodPanel" type="PanelContainer" parent="." unique_id=987428814]
 layout_mode = 1
@@ -207,5 +220,18 @@ text = "Loading...
 label_settings = SubResource("LabelSettings_8injy")
 horizontal_alignment = 1
 
+[node name="TextureRect" type="TextureRect" parent="." unique_id=1991765919]
+layout_mode = 0
+offset_left = 92.0
+offset_top = -156.0
+offset_right = 933.35535
+offset_bottom = 338.0
+mouse_filter = 2
+texture = ExtResource("7_uu0k4")
+expand_mode = 1
+
+[connection signal="pressed" from="CarContainer/MiniVan" to="." method="_on_mini_van_pressed"]
+[connection signal="pressed" from="CarContainer/TrailerTruck" to="." method="_on_trailer_truck_pressed"]
+[connection signal="pressed" from="CarContainer/TowTruck" to="." method="_on_tow_truck_pressed"]
 [connection signal="toggled" from="OptionsPanel/MarginContainer/HBoxContainer/Audio/Mute" to="." method="_on_mute_toggled"]
 [connection signal="value_changed" from="OptionsPanel/MarginContainer/HBoxContainer/Audio/Volume" to="." method="_on_volume_value_changed"]

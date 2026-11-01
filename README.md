@@ -1,49 +1,20 @@
-# GTA67 — v1.0.0
+# Coastline 67 — v0.0.1
 
-Godot 4.7 project: POLYGON City with vehicle physics, cameras, audio and HUD from Truck Town.
+An original low-poly tropical city sandbox inspired by open-world driving games. The city, characters and cars are built from Godot geometry. POLYGON City is not used or required.
 
-Open `project.godot` and press F5 to launch the vehicle selector. Eight POLYGON vehicles are available. The city traffic is static.
+Open `project.godot` with Godot 4.7 and press F5.
 
-Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
+- WASD: walk / drive; mouse: look.
+- E: enter / exit one of the three parked cars.
+- Shift: sprint / boost; Space: jump / brake.
+- Left mouse: shoot; C: vehicle camera; H: horn; L: headlights.
+- R: recover player or car; Esc: pause and controls.
 
-Each version uses its own branch: `v1.0.0`, `v1.0.1`, and so on.
+Drive to pink markers to earn $500. Traffic and pedestrians move through the city. Shooting or hitting pedestrians triggers police pursuit; escape to clear wanted stars. This is an early prototype: simple geometry, basic NPC behavior, no interiors or story campaign.
 
-## Controls
+Branch: `v0.0.1`. The earlier POLYGON integration remains in `v1.0.0`.
 
-- <kbd>Up Arrow</kbd>, <kbd>W</kbd>, <kbd>Gamepad Right Trigger</kbd>: Accelerate
-- <kbd>Space</kbd>: Brake
-- <kbd>R</kbd>: Reset vehicle
-- <kbd>Down Arrow</kbd>, <kbd>S</kbd>, <kbd>Gamepad Left Trigger</kbd>, <kbd>Gamepad B/Circle</kbd>, <kbd>Gamepad X/Square</kbd>: Brake/reverse
-- <kbd>Left Arrow</kbd>, <kbd>Gamepad Left Stick</kbd>, <kbd>Gamepad D-Pad Left</kbd>: Steer left
-- <kbd>Right Arrow</kbd>, <kbd>Gamepad Left Stick</kbd>, <kbd>Gamepad D-Pad Right</kbd>: Steer right
-- <kbd>U</kbd>, <kbd>Gamepad Select</kbd>, left-click speedometer: Change speedometer unit (m/s, km/h, mph)
-- <kbd>C</kbd>, <kbd>Gamepad Y/Triangle</kbd>: Change camera (exterior, interior, top-down)
-- <kbd>M</kbd>, <kbd>Gamepad D-Pad Down</kbd>: Change mood (sunrise, day, sunset, night)
-- <kbd>Shift</kbd>, <kbd>Gamepad A/Cross</kbd>: Use boost
-- <kbd>H</kbd>, <kbd>Enter</kbd>, <kbd>Gamepad Left Stick Press</kbd>: Use horn
-- <kbd>L</kbd>, <kbd>Gamepad Right Stick Press</kbd>: Toggle headlights (automatically occurs on mood change)
-- <kbd>Escape</kbd>, <kbd>Gamepad D-Pad Up</kbd>: Go back to menu (press again to exit)
-
-On mobile platforms, the vehicle automatically accelerates. Touch the left and
-right edges of the screen to steer. Touch the middle of the screen to
-brake/reverse (this also temporarily stops acceleration).
-
-Language: GDScript
-
-Renderer: Forward+
-
-Check out this demo on the Asset Store: https://store.godotengine.org/asset/godot-foundation/truck-town-demo/
-
-## How does it work?
-
-The base vehicle uses a
-[`VehicleBody3D`](https://docs.godotengine.org/en/latest/classes/class_vehiclebody3d.html)
-node. The trailer truck is tied together using a
-[`ConeJointTwist3D`](https://docs.godotengine.org/en/latest/classes/class_conetwistjoint3d.html)
-node, and the tow truck is tried together using a chain made of
-[`RigidBody3D`](https://docs.godotengine.org/en/latest/classes/class_rigidbody3d.html)
-nodes which are pinned together using
-[`PinJoint3D`](https://docs.godotengine.org/en/latest/classes/class_pinjoint3d.html) nodes.
+Vehicle physics, follow camera, engine/horn sounds and ambience are derived from the MIT-licensed Truck Town demo. Original demo scenes remain available under `car_select/` and `town/`.
 
 ## Credits
 
