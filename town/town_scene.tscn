@@ -1,0 +1,394 @@
+[gd_scene format=3 uid="uid://dnbdk0yqxr2wy"]
+
+[ext_resource type="PackedScene" path="res://Assets/Synty/PolygonCity/Scenes/Demo.tscn" id="1_amwer"]
+[ext_resource type="Script" uid="uid://di7cre4unhk3f" path="res://town/town_scene.gd" id="1_gxe8p"]
+[ext_resource type="Script" uid="uid://i2wsujhhpwj2" path="res://speedometer.gd" id="2"]
+[ext_resource type="Material" uid="uid://boboc4pk5t03s" path="res://town/sky_day.tres" id="2_1df3w"]
+[ext_resource type="Material" uid="uid://dwj22a5ckgpms" path="res://town/materials/grass.tres" id="2_ubld8"]
+[ext_resource type="Material" uid="uid://bhrhj1ylqw2tp" path="res://town/materials/cement.tres" id="3_8s61a"]
+[ext_resource type="PackedScene" uid="uid://cf2bmynxs522" path="res://town/lamp/lamp_scene.tscn" id="3_clgdk"]
+[ext_resource type="PackedScene" uid="uid://dpgyvcypghjek" path="res://town/tree/scene.gltf" id="3_pxdqy"]
+[ext_resource type="Texture2D" uid="uid://dctnd5sdo5ydj" path="res://town/ui/turbometer.webp" id="8_clgdk"]
+[ext_resource type="Texture2D" uid="uid://hccdo2xu0fl" path="res://town/ui/turbometer_background.webp" id="8_tyv8r"]
+
+[sub_resource type="Sky" id="Sky_1gf0c"]
+sky_material = ExtResource("2_1df3w")
+
+[sub_resource type="Environment" id="Environment_dauhq"]
+background_mode = 2
+sky = SubResource("Sky_1gf0c")
+ambient_light_sky_contribution = 0.5
+tonemap_mode = 4
+glow_intensity = 0.5
+fog_enabled = true
+fog_light_color = Color(0.7254902, 0.91764706, 1, 1)
+fog_density = 0.0015
+fog_sky_affect = 0.0
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_pxdqy"]
+height = 7.2680664
+
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_w44mb"]
+content_margin_top = 0.0
+content_margin_bottom = 0.0
+color = Color(1, 1, 1, 1)
+grow_begin = -8.0
+grow_end = -8.0
+
+[sub_resource type="Animation" id="Animation_tyv8r"]
+resource_name = "Idle"
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Label:theme_override_colors/font_outline_color")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(1, 0.46711743, 0.46711743, 1)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Label:theme_override_colors/font_color")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(0.48684698, 0.48684698, 0.48684698, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Label:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [-0.12085515]
+}
+
+[sub_resource type="Animation" id="Animation_w44mb"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Label:theme_override_colors/font_outline_color")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(1, 0.46711743, 0.46711743, 1)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Label:theme_override_colors/font_color")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Color(0.48684698, 0.48684698, 0.48684698, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Label:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [-0.12085515]
+}
+
+[sub_resource type="Animation" id="Animation_pvdab"]
+resource_name = "TURBO"
+length = 0.3
+loop_mode = 1
+step = 0.05
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Label:theme_override_colors/font_outline_color")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Color(1, 0.3444354, 0, 1), Color(1, 0.734516, 0, 1)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Label:theme_override_colors/font_color")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.1, 0.2),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Color(1, 0.82693917, 0, 1), Color(1, 0.12493098, 0, 1), Color(1, 0.4092583, 0, 1)]
+}
+tracks/2/type = "value"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Label:rotation")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"times": PackedFloat32Array(0, 0.049999997, 0.1, 0.15, 0.2, 0.25),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1),
+"update": 0,
+"values": [-0.12085515, 0.13720608, -0.12085515, 0.13720608, -0.12085515, 0.13720608]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_w44mb"]
+_data = {
+&"Idle": SubResource("Animation_tyv8r"),
+&"RESET": SubResource("Animation_w44mb"),
+&"TURBO": SubResource("Animation_pvdab")
+}
+
+[sub_resource type="InputEventAction" id="InputEventAction_a4722"]
+action = &"cycle_speedometer_unit"
+
+[sub_resource type="Shortcut" id="Shortcut_msvqx"]
+events = [SubResource("InputEventAction_a4722")]
+
+[sub_resource type="Gradient" id="Gradient_nng2a"]
+offsets = PackedFloat32Array(0, 0.2, 1)
+colors = PackedColorArray(0.7019608, 0.9019608, 1, 1, 1, 1, 1, 1, 1, 0.3019608, 0.101960786, 1)
+
+[sub_resource type="Gradient" id="Gradient_jks6h"]
+offsets = PackedFloat32Array(0)
+colors = PackedColorArray(1, 1, 1, 0.25098)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_m8ylb"]
+gradient = SubResource("Gradient_jks6h")
+width = 128
+height = 128
+
+[sub_resource type="Gradient" id="Gradient_1rnu2"]
+offsets = PackedFloat32Array(0.00645161)
+colors = PackedColorArray(1, 0, 0, 0.25098)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_xu6xc"]
+gradient = SubResource("Gradient_1rnu2")
+width = 128
+height = 128
+
+[node name="TownScene" type="Node3D" unique_id=1990567779]
+script = ExtResource("1_gxe8p")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=710399183]
+unique_name_in_owner = true
+environment = SubResource("Environment_dauhq")
+
+[node name="AmbientSound" type="AudioStreamPlayer" parent="." unique_id=1768893818]
+autoplay = true
+bus = &"Ambient"
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1020825067]
+transform = Transform3D(-0.793955, 0.350561, -0.496732, -0.295414, 0.491651, 0.819152, 0.531381, 0.797111, -0.286788, 11.0084, 12.3453, -31.3148)
+light_energy = 1.45
+shadow_enabled = true
+shadow_bias = 0.015
+shadow_blur = 1.5
+directional_shadow_mode = 0
+directional_shadow_max_distance = 80.0
+
+[node name="Lamps" type="Node3D" parent="." unique_id=1215593960]
+
+[node name="InstancePos" type="Marker3D" parent="." unique_id=89081834]
+unique_name_in_owner = true
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.5, -57.5)
+
+[node name="CityMap" parent="." instance=ExtResource("1_amwer")]
+
+[node name="GameUI" type="VBoxContainer" parent="." unique_id=870721625]
+offset_left = 24.0
+offset_top = 24.0
+offset_right = 168.0
+offset_bottom = 98.0
+theme_override_constants/separation = 20
+
+[node name="Back" type="Button" parent="GameUI" unique_id=2142412231]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+text = "« Back"
+
+[node name="PanelContainer" type="PanelContainer" parent="GameUI" unique_id=205809658]
+layout_mode = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="GameUI/PanelContainer" unique_id=1853055574]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="VBoxContainer" type="VBoxContainer" parent="GameUI/PanelContainer/MarginContainer" unique_id=1818956248]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="GameUI/PanelContainer/MarginContainer/VBoxContainer" unique_id=1745945643]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.5019608)
+text = "F1 - Controls  /  R - Reset vehicle"
+
+[node name="Controls" type="VBoxContainer" parent="GameUI/PanelContainer/MarginContainer/VBoxContainer" unique_id=886070146]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Label" type="Label" parent="GameUI/PanelContainer/MarginContainer/VBoxContainer/Controls" unique_id=514069778]
+layout_mode = 2
+text = "Arrows - Drive
+Enter - Honk
+Shift - Turbo
+L - Headlights"
+
+[node name="HSeparator" type="HSeparator" parent="GameUI/PanelContainer/MarginContainer/VBoxContainer/Controls" unique_id=1593160399]
+layout_mode = 2
+theme_override_styles/separator = SubResource("StyleBoxLine_w44mb")
+
+[node name="Label2" type="Label" parent="GameUI/PanelContainer/MarginContainer/VBoxContainer/Controls" unique_id=1268511783]
+layout_mode = 2
+text = "U - Cycle speed units
+C - Cycle camera
+M - Cycle mood"
+
+[node name="CarUI" type="HBoxContainer" parent="." unique_id=883662698]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -428.0
+offset_top = -92.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="Turbometer" type="TextureProgressBar" parent="CarUI" unique_id=1826510602]
+unique_name_in_owner = true
+layout_mode = 2
+max_value = 10.0
+step = 0.0
+value = 10.0
+texture_under = ExtResource("8_tyv8r")
+texture_progress = ExtResource("8_clgdk")
+texture_progress_offset = Vector2(2, 2)
+
+[node name="Label" type="Label" parent="CarUI/Turbometer" unique_id=2108878540]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -41.0
+offset_top = -25.0
+offset_right = 61.0
+offset_bottom = 17.0
+grow_horizontal = 2
+grow_vertical = 2
+rotation = -0.12085515
+pivot_offset_ratio = Vector2(0.5, 0.5)
+theme_override_colors/font_color = Color(0.48684698, 0.48684698, 0.48684698, 1)
+theme_override_colors/font_outline_color = Color(1, 0.46711743, 0.46711743, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 30
+text = "TURBO"
+
+[node name="TurboAnimator" type="AnimationPlayer" parent="CarUI/Turbometer" unique_id=1708193836]
+unique_name_in_owner = true
+libraries/ = SubResource("AnimationLibrary_w44mb")
+autoplay = &"Idle"
+
+[node name="Speedometer" type="Button" parent="CarUI" unique_id=294256170]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 40)
+layout_mode = 2
+size_flags_vertical = 8
+focus_mode = 0
+action_mode = 0
+shortcut = SubResource("Shortcut_msvqx")
+shortcut_feedback = false
+shortcut_in_tooltip = false
+text = "Speed: ???"
+script = ExtResource("2")
+tint_gradient = SubResource("Gradient_nng2a")
+
+[node name="TouchTurnLeft" type="Control" parent="." unique_id=325944973]
+layout_mode = 3
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+grow_vertical = 2
+
+[node name="TurnLeft" type="TouchScreenButton" parent="TouchTurnLeft" unique_id=727790093]
+modulate = Color(1, 1, 1, 0)
+position = Vector2(0, -256)
+scale = Vector2(2.5, 4)
+texture_normal = SubResource("GradientTexture2D_m8ylb")
+texture_pressed = SubResource("GradientTexture2D_xu6xc")
+passby_press = true
+action = "turn_left"
+visibility_mode = 1
+
+[node name="TouchReverse" type="Control" parent="." unique_id=155125709]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Reverse" type="TouchScreenButton" parent="TouchReverse" unique_id=1277398991]
+modulate = Color(1, 1, 1, 0)
+position = Vector2(-256, -256)
+scale = Vector2(4, 4)
+texture_normal = SubResource("GradientTexture2D_m8ylb")
+texture_pressed = SubResource("GradientTexture2D_xu6xc")
+passby_press = true
+action = "reverse"
+visibility_mode = 1
+
+[node name="TouchTurnRight" type="Control" parent="." unique_id=1012524599]
+layout_mode = 3
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="TurnRight" type="TouchScreenButton" parent="TouchTurnRight" unique_id=1611600317]
+modulate = Color(1, 1, 1, 0)
+position = Vector2(-320, -256)
+scale = Vector2(2.5, 4)
+texture_normal = SubResource("GradientTexture2D_m8ylb")
+texture_pressed = SubResource("GradientTexture2D_xu6xc")
+passby_press = true
+action = "turn_right"
+visibility_mode = 1
+
+[connection signal="pressed" from="CarUI/Speedometer" to="CarUI/Speedometer" method="_on_speedometer_pressed"]

@@ -1,0 +1,10 @@
+# Godot generated files
+.godot/
+/android/
+.DS_Store
+*.tmp
+*.log
+exports/
+
+# Purchased POLYGON assets stay on this Mac.
+Assets/
