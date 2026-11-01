@@ -27,6 +27,7 @@ const VEHICLES := [
 @onready var loading_screen: PanelContainer = %LoadingPanel
 
 var town: Node3D = null
+var _loading := false
 
 func _ready() -> void:
 	for vehicle in VEHICLES:
@@ -49,7 +50,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if Input.is_action_just_pressed(&"back"):
+	if Input.is_action_just_pressed(&"back") and not is_instance_valid(town) and not _loading:
 		_on_back_pressed()
 
 
@@ -58,6 +59,8 @@ func focus_first_car() -> void:
 
 
 func _load_vehicle(vehicle: Array) -> void:
+	if _loading or is_instance_valid(town): return
+	_loading = true
 	# Show loading screen and wait for it to be rendered
 	loading_screen.visible = true
 	await get_tree().process_frame
@@ -84,12 +87,15 @@ func _load_vehicle(vehicle: Array) -> void:
 
 	get_parent().add_child(town)
 	hide()
+	_loading = false
 
 
 func _on_back_pressed() -> void:
 	if is_instance_valid(town):
 		# Currently in the town, go back to main menu.
 		town.queue_free()
+		town = null
+		get_tree().paused = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		loading_screen.visible = false
 		show()

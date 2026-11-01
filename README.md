@@ -4,9 +4,15 @@ Godot 4.7 city sandbox based on POLYGON City and the Truck Town vehicle controll
 
 Open `project.godot` and press F5 to launch the vehicle selector. Eight vehicles have individually fitted wheels, suspension and cabin cameras. Leave the car to walk, run, jump and use a pistol in first or third person.
 
-The city has 40 moving cars, 64 pedestrians, parked cars, seven signal-controlled junctions and 24 crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. This is a simplified game simulation with fixed phases, without lane changes or police pursuits. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
+The city has 40 civilian cars, 64 pedestrians, parked cars, seven signal-controlled junctions and 24 crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. Civilian traffic uses fixed phases without lane changes. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
 
-A full day lasts 30 minutes: warm sunlight, long shadows, distant haze, street lamps, neon and nighttime reflections change with the clock. Nearby lights and pedestrian animation updates use distance budgets. The HUD shows the local street map, cash, wanted stars, clock, speed and ammunition. Cash and wanted stars are sandbox indicators; there is no mission economy yet.
+A full day lasts 30 minutes: warm sunlight, long shadows, distant haze, street lamps, neon and nighttime reflections change with the clock. Nearby lights and pedestrian animation updates use distance budgets. The HUD shows the local street map, GPS route, objective, patrol positions, cash, wanted stars, clock, speed, vehicle condition and ammunition.
+
+Open the city menu with Tab or Escape to take a delivery or a timed street circuit. Deliveries pay from $180 plus distance; the fixed circuit pays from $320 plus distance. Both award another $100 for avoiding damage. Drive to the circuit start and press F while stopped; the timer starts there, so personal best times compare the same route. GPS follows connected road lanes and reroutes when you leave the route.
+
+Gunfire and serious collisions caused by the player attract one to three police cars. Break line of sight and stay hidden to lose wanted stars; nearby patrols can arrest a stopped player after four seconds. Repair the car, recover health and refill ammunition at the cyan S service marker using earned cash. Severe damage reduces engine power; a wreck requires recovery. Arrest costs up to $200, medical help up to $100 and vehicle recovery up to $75, capped by the current balance so the player cannot become stuck without funds.
+
+Cash, completed jobs, circuit record, ammunition, health and each selected car's condition save automatically in `user://gta67_progress.json`. Progress is saved after transactions, every 20 seconds and on exit; active jobs and police pursuits are session-only. Pausing freezes city traffic and mission timers. Selecting a different car cancels an active job and is unavailable during a pursuit.
 
 Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
 
@@ -21,10 +27,12 @@ This version is on branch `2.0.0`. Purchased models, textures and map files are 
 - <kbd>C</kbd>: Exterior / cabin / top-down camera in a car; third / first person on foot.
 - Mouse: Look on foot; hold right mouse to look around in a car.
 - <kbd>Q</kbd>: Draw or holster the pistol. Right mouse aims; left mouse fires.
-- <kbd>R</kbd>: Reload on foot / reset while driving. <kbd>F5</kbd> always restores the car.
+- <kbd>R</kbd>: Reload on foot / recover while driving. <kbd>F5</kbd>: Recover the car (up to $75, cancels the current job, unavailable during pursuit).
+- <kbd>F</kbd>: Pick up / deliver a parcel, start the circuit or use the nearby service.
+- <kbd>Tab</kbd> or <kbd>Escape</kbd>: Pause and open the city jobs menu. Escape resumes. Choose a different car from this menu.
 - <kbd>M</kbd>: Advance to sunrise, day, sunset or night.
 - <kbd>H</kbd>: Horn. <kbd>L</kbd>: Headlights (also switch automatically at dusk).
-- <kbd>F1</kbd>: Controls. <kbd>Escape</kbd>: Vehicle selector; press again to exit.
+- <kbd>F1</kbd>: Controls. Escape from the vehicle selector exits the game.
 
 Desktop keyboard and mouse are the primary controls. The inherited controller support covers driving; the new on-foot actions require keyboard and mouse.
 

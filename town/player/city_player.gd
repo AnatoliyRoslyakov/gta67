@@ -2,6 +2,7 @@ extends CharacterBody3D
 
 signal fired(origin: Vector3, destination: Vector3, collider: Object)
 signal ammunition_changed(loaded: int, reserve: int)
+signal incapacitated
 const STEP_HEIGHT := 0.29
 const Motion = preload("res://town/player/humanoid_motion.gd")
 const CHARACTER = preload("res://Assets/Synty/PolygonCity/Prefabs/Characters/Character_Male_Hoodie.tscn")
@@ -33,6 +34,8 @@ var head_bob := 0.0
 var health := 100.0
 var saved_collision_layer := 2
 var _step_visual_offset := 0.0
+var _hurt_cooldown := 0.0
+var _invulnerable_until_msec := 0
 
 func _ready() -> void:
 	collision_layer = 2
@@ -122,6 +125,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if weapon_drawn: shoot()
 
 func _physics_process(delta: float) -> void:
+	_hurt_cooldown = maxf(0.0, _hurt_cooldown - delta)
 	fire_time = maxf(0, fire_time - delta)
 	recoil = move_toward(recoil, 0, delta * 7)
 	muzzle.light_energy = 3 if fire_time > 0.18 else 0
@@ -148,7 +152,18 @@ func _physics_process(delta: float) -> void:
 		coyote_time = 0.0
 	_step_visual_offset = lerpf(_step_visual_offset, 0.0, 1.0 - exp(-delta * 18.0))
 	_try_step_up(delta)
+	var landing_speed := velocity.y
+	var incoming_velocity := velocity
 	move_and_slide()
+	if is_on_floor() and landing_speed < -10:
+		receive_hit((-landing_speed - 10.0) * 5.0, Vector3.ZERO)
+	for index in get_slide_collision_count():
+		var collision := get_slide_collision(index)
+		var other := collision.get_collider() as Node
+		if is_instance_valid(other) and other.is_in_group("traffic"):
+			var relative_velocity := incoming_velocity - collision.get_collider_velocity()
+			var closing_speed := maxf(0.0, -relative_velocity.dot(collision.get_normal()))
+			if closing_speed > 4: receive_hit((closing_speed - 3.0) * 5.0, Vector3.ZERO)
 	visual.position.y = _step_visual_offset
 	var horizontal := Vector2(velocity.x, velocity.z).length()
 	if weapon_drawn or first_person: visual.rotation.y = lerp_angle(visual.rotation.y, yaw + PI, 1.0 - exp(-delta * 14.0))
@@ -205,6 +220,16 @@ func _try_step_up(delta: float) -> void:
 func reload_weapon() -> void:
 	if reload_time > 0 or magazine == 12 or reserve <= 0: return
 	reload_time = 1.35
+
+func grant_invulnerability(seconds: float) -> void:
+	_invulnerable_until_msec = maxi(_invulnerable_until_msec, Time.get_ticks_msec() + ceili(maxf(0.0, seconds) * 1000.0))
+
+func receive_hit(amount: float, _direction: Vector3) -> void:
+	if amount <= 0 or (active and _hurt_cooldown > 0) or health <= 0: return
+	if Time.get_ticks_msec() < _invulnerable_until_msec: return
+	_hurt_cooldown = 0.8 if active else 0.0
+	health = maxf(0.0, health - amount)
+	if health <= 0: incapacitated.emit.call_deferred()
 
 func shoot() -> void:
 	if fire_time > 0 or reload_time > 0 or not weapon_drawn: return

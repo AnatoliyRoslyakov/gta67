@@ -4,6 +4,7 @@ const GTAHud = preload("res://town/gta_hud.gd")
 const Player = preload("res://town/player/city_player.gd")
 const Atmosphere = preload("res://town/atmosphere.gd")
 const CityAudio = preload("res://town/player/city_audio.gd")
+const CityExperience = preload("res://town/gameplay/city_experience.gd")
 enum Mood { SUNRISE, DAY, SUNSET, NIGHT }
 @export var cash := 500
 @export_range(0, 3) var wanted_level := 0
@@ -16,13 +17,16 @@ var traffic: Node3D
 var driving := true
 var transition := false
 var spawn_transform := Transform3D.IDENTITY
-var heat_timer := 0.0
+var vehicle_health := 100.0
+var gameplay: Node
+var _back_callback: Callable
 var reflections_enabled := true
 var status_message := ""
 var status_time := 0.0
 @onready var controls_sheet: Control = %Controls
 
 func setup(car: Node3D, back_callback: Callable, reflections: bool) -> void:
+	_back_callback = back_callback
 	reflections_enabled = reflections
 	for path in ["Camera", "WorldEnvironment", "Directional Light", "ReflectionProbe"]:
 		var node := $CityMap.get_node_or_null(path)
@@ -35,7 +39,8 @@ func setup(car: Node3D, back_callback: Callable, reflections: bool) -> void:
 	player_body.turbo_animator = %TurboAnimator
 	%Speedometer.car_body = player_body
 	%InstancePos.add_child(car)
-	%Back.pressed.connect(back_callback)
+	%Back.text = "Пауза"
+	%Back.pressed.connect(_open_game_menu)
 
 func _ready() -> void:
 	spawn_transform = %InstancePos.global_transform
@@ -62,12 +67,15 @@ func _ready() -> void:
 	$CarUI.hide()
 	$GameUI/PanelContainer/MarginContainer/VBoxContainer/Label.text = "F1 — управление"
 	%Controls/Label.text = "WASD — движение • Shift — бег/ускорение\nE — сесть/выйти • C — камера • Space — прыжок/тормоз\nQ — оружие • ПКМ — прицел • ЛКМ — выстрел • R — перезарядка"
-	%Controls/Label2.text = "M — время суток • L — фары • H — сигнал\nF5 — восстановить машину • Esc — выбор автомобиля"
+	%Controls/Label2.text = "F — действие / сервис • Tab — заказы • Esc — пауза\nM — время суток • L — фары • H — сигнал • F5 — эвакуация ($75)"
 	# Runtime ownership stays outside the purchased map scene.
 	if ResourceLoader.exists("res://town/traffic/traffic_world.gd"):
 		traffic = load("res://town/traffic/traffic_world.gd").new()
 		add_child(traffic)
 		traffic.configure($CityMap, player_body)
+	gameplay = CityExperience.new()
+	add_child(gameplay)
+	gameplay.configure(self, _back_callback)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _physics_process(delta: float) -> void:
@@ -84,23 +92,19 @@ func _physics_process(delta: float) -> void:
 	if not driving and character.global_position.distance_to(player_body.global_position) >= 4:
 		gta_hud.hint = "Shift — бег   C — камера   Q — оружие   ПКМ — прицел"
 	if not driving and character.reload_time > 0: gta_hud.hint = "ПЕРЕЗАРЯДКА…"
+	if gameplay:
+		var action_hint: String = gameplay.context_hint()
+		if not action_hint.is_empty(): gta_hud.hint = action_hint
 	status_time = maxf(0, status_time - delta)
 	if status_time > 0: gta_hud.hint = status_message
-	if wanted_level > 0:
-		heat_timer -= delta
-		if heat_timer <= 0:
-			wanted_level -= 1
-			heat_timer = 20
-	if player_body.global_position.y < -12: reset_vehicle()
-	if not driving and character.global_position.y < -12:
-		character.global_position = spawn_transform.origin + Vector3(3, 1, 0)
-		character.velocity = Vector3.ZERO
+	if player_body.global_position.y < -12 or (not driving and character.global_position.y < -12):
+		gameplay.recover_world_fall()
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_E: _interact()
-		elif event.physical_keycode == KEY_F5: reset_vehicle()
-		elif event.physical_keycode == KEY_R and driving: reset_vehicle()
+		elif event.physical_keycode == KEY_F5: gameplay.recover_vehicle()
+		elif event.physical_keycode == KEY_R and driving: gameplay.recover_vehicle()
 	if event.is_action_pressed("cycle_mood"): atmosphere.advance_period()
 	elif event.is_action_pressed("toggle_controls"): controls_sheet.visible = not controls_sheet.visible
 
@@ -163,12 +167,11 @@ func _set_subject(subject: Node3D) -> void:
 	atmosphere.set_subject(subject)
 	if traffic and traffic.has_method("set_subject"): traffic.set_subject(subject)
 
-func _on_shot(origin: Vector3, _destination: Vector3, _collider: Object) -> void:
-	wanted_level = mini(wanted_level + 1, 3)
-	heat_timer = 35
+func _on_shot(origin: Vector3, _destination: Vector3, collider: Object) -> void:
+	gameplay.report_shot(origin, collider)
 	if traffic and traffic.has_method("alert_nearby"): traffic.alert_nearby(origin)
 
-func reset_vehicle() -> void:
+func reset_vehicle() -> bool:
 	var space := get_world_3d().direct_space_state
 	var collider := player_body.get_node("CollisionShape3D") as CollisionShape3D
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -177,9 +180,19 @@ func reset_vehicle() -> void:
 	query.exclude = [player_body.get_rid()]
 	var reset_pose := spawn_transform
 	var available := false
+	var candidates: Array[Transform3D] = []
 	for offset in [0.0, -8.0, 8.0, -16.0, 16.0, -24.0, 24.0]:
 		var candidate := spawn_transform
 		candidate.origin += candidate.basis.z * offset
+		candidates.append(candidate)
+	if is_instance_valid(traffic) and traffic.initialized:
+		var states: Array = traffic.lanes.keys()
+		states.sort_custom(func(a: Vector3i, b: Vector3i): return traffic.lane_position(a).distance_squared_to(spawn_transform.origin) < traffic.lane_position(b).distance_squared_to(spawn_transform.origin))
+		for index in mini(states.size(), 96):
+			var state: Vector3i = states[index]
+			var forward: Vector2i = traffic.DIRECTIONS[state.z]
+			candidates.append(Transform3D(Basis(Vector3.UP, atan2(forward.x, forward.y)), traffic.lane_position(state) + Vector3.UP * 0.5))
+	for candidate in candidates:
 		var ground := space.intersect_ray(PhysicsRayQueryParameters3D.create(candidate.origin + Vector3.UP * 2, candidate.origin - Vector3.UP * 4, 1, [player_body.get_rid()]))
 		if ground.is_empty() or ground.normal.y < 0.8: continue
 		if absf(ground.position.y - (spawn_transform.origin.y - 0.5)) > 0.35: continue
@@ -191,7 +204,7 @@ func reset_vehicle() -> void:
 			break
 	if not available:
 		_status("Место восстановления занято — попробуйте ещё раз")
-		return
+		return false
 	player_body.global_transform = reset_pose
 	player_body.linear_velocity = Vector3.ZERO
 	player_body.angular_velocity = Vector3.ZERO
@@ -199,6 +212,10 @@ func reset_vehicle() -> void:
 	player_body.sleeping = false
 	player_body.reset_physics_interpolation()
 	player_body.get_node("CameraBase/Camera3D").update_camera()
+	return true
+
+func _open_game_menu() -> void:
+	if gameplay: gameplay.open_menu()
 
 func _status(message: String) -> void:
 	status_message = message

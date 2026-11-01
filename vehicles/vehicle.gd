@@ -1,5 +1,7 @@
 extends VehicleBody3D
 
+signal collision_impact(strength: float, collider: Node, own_closing_speed: float)
+signal shot_damage(amount: float)
 @export var engine_force_value := 1800.0
 @export var max_forward_speed := 44.0
 @export var max_reverse_speed := 9.0
@@ -12,11 +14,44 @@ var previous_speed := 0.0
 var desired_engine_pitch := 0.6
 var is_compatibility := false
 var impact_cooldown := 0.0
+var drive_condition := 1.0
+var _damage_cooldown := 0.0
 
 
 func _ready() -> void:
 	is_compatibility = RenderingServer.get_current_rendering_method() == "gl_compatibility"
+	contact_monitor = true
+	max_contacts_reported = 12
+	collision_mask = 1 | 2 | 4 | 8
 	set_controlled(controllable)
+
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	_damage_cooldown = maxf(0.0, _damage_cooldown - state.step)
+	if _damage_cooldown > 0: return
+	var strongest := 0.0
+	var own_closing_speed := 0.0
+	var hit_body: Node
+	for index in state.get_contact_count():
+		# Contact normals and point velocities are already in world coordinates.
+		var normal := state.get_contact_local_normal(index).normalized()
+		if absf(normal.y) > 0.7: continue
+		var own_velocity := state.get_contact_local_velocity_at_position(index)
+		var relative := own_velocity - state.get_contact_collider_velocity_at_position(index)
+		var closing_speed := maxf(0.0, -relative.dot(normal))
+		var strength := absf(state.get_contact_impulse(index).dot(normal)) / maxf(mass, 1.0)
+		strength = maxf(strength, closing_speed)
+		if strength > strongest:
+			strongest = strength
+			own_closing_speed = maxf(0.0, -own_velocity.dot(normal))
+			hit_body = state.get_contact_collider_object(index) as Node
+	if strongest > 2.5:
+		_damage_cooldown = 0.7
+		collision_impact.emit.call_deferred(strongest, hit_body, own_closing_speed)
+
+
+func receive_hit(amount: float, _direction: Vector3) -> void:
+	shot_damage.emit(amount * 0.35)
 
 
 func set_controlled(value: bool) -> void:
@@ -86,6 +121,11 @@ func _physics_process(delta: float) -> void:
 	if is_instance_valid(turbometer):
 		turbometer.value += -delta * 2.0 if turbo_active else delta * 0.7
 	if turbo_active: engine_force *= 1.4
+	if drive_condition <= 0:
+		engine_force = 0.0
+		brake = maxf(brake, 16.0)
+	else:
+		engine_force *= lerpf(0.45, 1.0, clampf(drive_condition / 0.5, 0.0, 1.0))
 	# Grounded aerodynamic load, capped to prevent suspension bottoming at speed.
 	var grounded := false
 	for child in get_children():

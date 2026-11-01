@@ -5,6 +5,12 @@ const CENTER := Vector2(100, 100)
 const MAP_RECT := Rect2(0, 0, 200, 200)
 var player_body: Node3D
 var footprints: Array[Dictionary] = []
+var navigation: Dictionary = {}
+
+
+func set_navigation(state: Dictionary) -> void:
+	navigation = state
+	queue_redraw()
 
 
 func configure(city: Node3D, vehicle: Node3D) -> void:
@@ -41,6 +47,7 @@ func _draw() -> void:
 			var world_rect: Rect2 = footprint.rect
 			var rect := Rect2((world_rect.position - origin) * MAP_SCALE + CENTER, world_rect.size * MAP_SCALE)
 			if rect.intersects(MAP_RECT): draw_rect(rect.intersection(MAP_RECT), colors[footprint.layer])
+		_draw_navigation(origin)
 		var forward := player_body.global_basis.z
 		if player_body is CharacterBody3D:
 			forward = Vector3(-sin(player_body.yaw), 0, -cos(player_body.yaw))
@@ -51,3 +58,54 @@ func _draw() -> void:
 		draw_colored_polygon(arrow, Color("fff0d7"))
 	draw_rect(MAP_RECT.grow(-1), Color("b6c7c1"), false, 2)
 	draw_string(ThemeDB.fallback_font, Vector2(10, 19), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("f1eee0"))
+
+
+func _draw_navigation(origin: Vector2) -> void:
+	var route: Array = navigation.get("route", [])
+	var points := PackedVector2Array()
+	for point in route:
+		if point is Vector3: points.append(_map_point(point, origin))
+	if points.size() > 1:
+		draw_polyline(points, Color(0.12, 0.12, 0.08, 0.7), 6, true)
+		draw_polyline(points, Color("f0c574"), 3, true)
+	var service: Vector3 = navigation.get("service_position", Vector3.INF)
+	if service.is_finite(): _marker(_map_point(service, origin), Color("74cfc7"), "S")
+	if navigation.get("on_foot", false):
+		var car: Vector3 = navigation.get("car_position", Vector3.INF)
+		if car.is_finite(): _marker(_map_point(car, origin), Color("dfe8ee"), "C")
+	for police in navigation.get("police", []):
+		if not police is Vector3: continue
+		var p := _clamped_point(_map_point(police, origin))
+		draw_circle(p, 5.5, Color("172531"))
+		draw_circle(p, 3.5, Color("ed817b"))
+		if Rect2(8, 8, 184, 184).has_point(_map_point(police, origin)):
+			draw_arc(p, 6.5, -PI * 0.85, -PI * 0.15, 8, Color("95bfe4"), 1.5, true)
+	if navigation.get("active", false):
+		var target: Vector3 = navigation.get("target", Vector3.INF)
+		if target.is_finite():
+			var point := _map_point(target, origin)
+			var p := _clamped_point(point)
+			var diamond := PackedVector2Array([p + Vector2(0, -7), p + Vector2(7, 0), p + Vector2(0, 7), p + Vector2(-7, 0)])
+			draw_colored_polygon(diamond, Color("f0c574"))
+			draw_circle(p, 2, Color("283738"))
+			if p.distance_to(point) > 1:
+				var direction := (point - CENTER).normalized()
+				draw_line(p - direction * 3, p + direction * 4, Color("283738"), 2, true)
+
+
+func _map_point(point: Vector3, origin: Vector2) -> Vector2:
+	return (Vector2(point.x, point.z) - origin) * MAP_SCALE + CENTER
+
+
+func _clamped_point(point: Vector2) -> Vector2:
+	# Radial clipping keeps the bearing correct when the objective is off-screen.
+	var offset := point - CENTER
+	var extent := maxf(absf(offset.x), absf(offset.y))
+	return CENTER + offset * minf(1.0, 88.0 / maxf(extent, 0.001))
+
+
+func _marker(point: Vector2, color: Color, letter: String) -> void:
+	var p := _clamped_point(point)
+	draw_rect(Rect2(p - Vector2(6, 6), Vector2(12, 12)), Color("172531"))
+	draw_rect(Rect2(p - Vector2(6, 6), Vector2(12, 12)), color, false, 1.5)
+	draw_string(ThemeDB.fallback_font, p + Vector2(-3.5, 4), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, color)
