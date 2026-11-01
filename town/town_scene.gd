@@ -1,5 +1,11 @@
 extends Node3D
 
+const GTAHud = preload("res://town/gta_hud.gd")
+
+@export var cash := 500
+@export_range(0, 3) var wanted_level := 0
+var gta_hud: GTAHud
+
 enum Mood {
 	SUNRISE,
 	DAY,
@@ -50,6 +56,12 @@ func setup(car: Node3D, back_callback: Callable, sdfgi: bool) -> void:
 
 func _ready() -> void:
 	spawn_transform = %InstancePos.global_transform
+	gta_hud = GTAHud.new()
+	gta_hud.city_map = $CityMap
+	gta_hud.player_body = player_body
+	gta_hud.cash = cash
+	gta_hud.wanted_level = wanted_level
+	add_child(gta_hud)
 	# Ensure headlights are toggled on automatically according to the initial mood.
 	# The scene tree is not available at first, so we have to set the mood a second time
 	# in deferred mode, which will call the setter again.
@@ -73,6 +85,8 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	gta_hud.cash = cash
+	gta_hud.wanted_level = wanted_level
 	if player_body.global_position.y < -10.0:
 		reset_vehicle()
 
