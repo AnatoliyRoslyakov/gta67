@@ -5,6 +5,8 @@ const Citizen = preload("res://town/traffic/citizen.gd")
 const TrafficSignal = preload("res://town/traffic/traffic_signal.gd")
 const CELL := 5.0
 const WALK_CELL := 2.5
+const DRIVER_BUCKET_SIZE := 20.0
+const DRIVER_INDEX_INTERVAL := 0.1
 const DIRECTIONS := [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]
 const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle"]
 const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat"]
@@ -28,6 +30,10 @@ var elapsed := 0.0
 var initialized := false
 var rng := RandomNumberGenerator.new()
 var _starting := false
+var _driver_buckets: Dictionary = {}
+var _driver_index_tick := 0.0
+var _indexed_driver_count := -1
+var _crossing_occupancy := PackedInt32Array()
 
 
 func configure(city: Node3D, player: Node3D) -> void:
@@ -64,13 +70,51 @@ func _initialize() -> void:
 	_build_walkways()
 	_organize_parked_cars()
 	await get_tree().physics_frame
-	_spawn_population()
+	await _spawn_population()
+	_rebuild_driver_index()
+	await get_tree().physics_frame
 	initialized = true
 
 
 func _physics_process(delta: float) -> void:
 	elapsed += delta
+	_driver_index_tick -= delta
+	if _driver_index_tick <= 0.0:
+		_driver_index_tick += DRIVER_INDEX_INTERVAL
+		_rebuild_driver_index()
+	_crossing_occupancy.resize(junctions.size())
+	_crossing_occupancy.fill(0)
+	for person in citizens:
+		var crossing: int = person.crossing_junction
+		if crossing >= 0 and crossing < _crossing_occupancy.size(): _crossing_occupancy[crossing] += 1
 	for index in junctions.size(): _refresh_junction(index)
+
+
+func _rebuild_driver_index() -> void:
+	_driver_buckets.clear()
+	for driver in drivers:
+		if not is_instance_valid(driver): continue
+		var p := driver.global_position
+		var bucket := Vector2i(floori(p.x / DRIVER_BUCKET_SIZE), floori(p.z / DRIVER_BUCKET_SIZE))
+		if not _driver_buckets.has(bucket): _driver_buckets[bucket] = []
+		_driver_buckets[bucket].append(driver)
+	_indexed_driver_count = drivers.size()
+
+
+func nearby_drivers(origin: Vector3, radius: float) -> Array[CharacterBody3D]:
+	if _indexed_driver_count != drivers.size(): _rebuild_driver_index()
+	var found: Array[CharacterBody3D] = []
+	# Covers 0.1 s of movement at the fastest police speed. Positions are filtered live.
+	var reach := radius + 2.5
+	var minimum := Vector2i(floori((origin.x - reach) / DRIVER_BUCKET_SIZE), floori((origin.z - reach) / DRIVER_BUCKET_SIZE))
+	var maximum := Vector2i(floori((origin.x + reach) / DRIVER_BUCKET_SIZE), floori((origin.z + reach) / DRIVER_BUCKET_SIZE))
+	var radius_squared := radius * radius
+	for x in range(minimum.x, maximum.x + 1):
+		for z in range(minimum.y, maximum.y + 1):
+			for driver in _driver_buckets.get(Vector2i(x, z), []):
+				if is_instance_valid(driver) and driver.global_position.distance_squared_to(origin) <= radius_squared:
+					found.append(driver)
+	return found
 
 
 func _release_junction(index: int) -> void:
@@ -248,6 +292,9 @@ func _organize_parked_cars() -> void:
 
 
 func _spawn_population() -> void:
+	# Keep the loading overlay responsive while models, colliders and rigs enter the tree.
+	var car_batch := 0
+	var pedestrian_batch := 0
 	var candidates: Array = lanes.keys()
 	candidates.shuffle()
 	for state in candidates:
@@ -267,6 +314,10 @@ func _spawn_population() -> void:
 		actor.position = p + Vector3.UP * 0.03
 		add_child(actor)
 		drivers.append(actor)
+		car_batch += 1
+		if car_batch == 2:
+			car_batch = 0
+			await get_tree().process_frame
 	var walk_candidates: Array = walk_neighbors.keys()
 	walk_candidates.shuffle()
 	for cell in walk_candidates:
@@ -285,6 +336,10 @@ func _spawn_population() -> void:
 		person.position = p + Vector3.UP * 0.03
 		add_child(person)
 		citizens.append(person)
+		pedestrian_batch += 1
+		if pedestrian_batch == 4:
+			pedestrian_batch = 0
+			await get_tree().process_frame
 
 
 func _spawn_clear(p: Vector3, dims: Vector3, yaw: float = 0.0) -> bool:
@@ -333,12 +388,11 @@ func may_enter(actor: CharacterBody3D, from: Vector3i, to: Vector3i) -> bool:
 	if owner == actor and bool(junctions[index].get("entered", false)): return true
 	if light_state(index, to.z) != 2: return false
 	if is_instance_valid(owner) and owner != actor: return false
-	for person in citizens:
-		if person.crossing_junction == index: return false
+	if index < _crossing_occupancy.size() and _crossing_occupancy[index] > 0: return false
 	# Do not block the box: require space beyond the crossing before entry.
 	var direction: Vector2i = DIRECTIONS[to.z]
 	var exit := lane_position(to) + Vector3(direction.x, 0, direction.y) * 9
-	for other in drivers:
+	for other in nearby_drivers(exit, 9.0):
 		if other == actor: continue
 		var relative: Vector3 = other.global_position - exit
 		var along := relative.x * direction.x + relative.z * direction.y
@@ -382,7 +436,7 @@ func may_cross(a: Vector2i, b: Vector2i) -> bool:
 	if phase < 30 or phase >= 36: return false
 	var start := walk_position(a)
 	var end := walk_position(b)
-	for driver in drivers:
+	for driver in nearby_drivers((start + end) * 0.5, start.distance_to(end) * 0.5 + 3.2):
 		if _distance_to_crossing(driver.global_position, start, end) < 3.2: return false
 	if is_instance_valid(subject) and _distance_to_crossing(subject.global_position, start, end) < 3.2: return false
 	return true

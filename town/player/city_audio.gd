@@ -3,6 +3,10 @@ extends Node
 # Original one-shot Foley is synthesized in memory; no imported audio asset is required.
 const RATE := 24000
 const MOODS := ["sunrise", "day", "sunset", "night"]
+static var _cached_shots: Array[AudioStreamWAV] = []
+static var _cached_steps: Array[AudioStreamWAV] = []
+static var _cached_reload: AudioStreamWAV
+static var _cached_ambience: Array[AudioStreamOggVorbis] = []
 var player: CharacterBody3D
 var atmosphere: Node
 var shots: Array[AudioStreamWAV] = []
@@ -40,18 +44,25 @@ func _build() -> void:
 	if _built: return
 	_built = true
 	rng.seed = 670024
-	for variant in 4: shots.append(_synthesize("shot", variant))
-	for variant in 6: steps.append(_synthesize("step", variant))
-	reload_sound = _synthesize("reload", 1)
+	# Streams are immutable after preparation; independent voices share their PCM.
+	if _cached_reload == null:
+		for variant in 4: _cached_shots.append(_synthesize("shot", variant))
+		for variant in 6: _cached_steps.append(_synthesize("step", variant))
+		_cached_reload = _synthesize("reload", 1)
+		for mood in MOODS:
+			var stream := load("res://town/sound/mood_%s.ogg" % mood).duplicate() as AudioStreamOggVorbis
+			stream.loop = true
+			_cached_ambience.append(stream)
+	shots.assign(_cached_shots)
+	steps.assign(_cached_steps)
+	reload_sound = _cached_reload
 	shot_voice = _voice("Gunshot", 4)
 	step_voice = _voice("Footstep", 1)
 	reload_voice = _voice("Reload", 1)
-	for mood in MOODS:
-		var voice := _voice("Ambient_" + mood, 1)
+	for index in MOODS.size():
+		var voice := _voice("Ambient_" + MOODS[index], 1)
 		voice.bus = "Ambient" if AudioServer.get_bus_index("Ambient") >= 0 else "Master"
-		var stream := load("res://town/sound/mood_%s.ogg" % mood).duplicate() as AudioStreamOggVorbis
-		stream.loop = true
-		voice.stream = stream
+		voice.stream = _cached_ambience[index]
 		voice.volume_linear = 0.0
 		ambience.append(voice)
 
@@ -79,15 +90,17 @@ func _process(delta: float) -> void:
 		if target > 0 and not voice.playing: voice.play()
 		elif target == 0 and voice.volume_linear < 0.0001 and voice.playing: voice.stop()
 	var active := is_instance_valid(player) and bool(player.get("active"))
-	_character_gain = lerpf(_character_gain, 1.0 if active else 0.0, 1.0 - exp(-delta * 45.0))
-	shot_voice.volume_linear = 0.28 * _character_gain
-	step_voice.volume_linear = _step_volume * _character_gain
-	reload_voice.volume_linear = 0.14 * _character_gain
+	if active or _character_gain > 0.0:
+		_character_gain = lerpf(_character_gain, 1.0 if active else 0.0, 1.0 - exp(-delta * 45.0))
+		if not active and _character_gain < 0.001: _character_gain = 0.0
+		shot_voice.volume_linear = 0.28 * _character_gain
+		step_voice.volume_linear = _step_volume * _character_gain
+		reload_voice.volume_linear = 0.14 * _character_gain
 	if not active:
-		if _character_gain < 0.001:
-			shot_voice.stop()
-			step_voice.stop()
-			reload_voice.stop()
+		if _character_gain == 0.0:
+			if shot_voice.playing: shot_voice.stop()
+			if step_voice.playing: step_voice.stop()
+			if reload_voice.playing: reload_voice.stop()
 		_reload_was_active = false
 		_grounded = false
 		return

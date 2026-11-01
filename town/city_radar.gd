@@ -10,7 +10,7 @@ var navigation: Dictionary = {}
 
 func set_navigation(state: Dictionary) -> void:
 	navigation = state
-	queue_redraw()
+	# The HUD redraws at 20 Hz; several state updates in one frame coalesce.
 
 
 func configure(city: Node3D, vehicle: Node3D) -> void:

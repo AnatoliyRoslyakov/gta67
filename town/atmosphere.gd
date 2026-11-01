@@ -7,6 +7,7 @@ signal night_changed(is_night: bool)
 @export_range(120.0, 7200.0, 30.0) var day_duration_seconds := 1800.0
 @export var cycle_enabled := true
 @export var screen_space_reflections := true
+@export_enum("Performance", "Balanced", "High") var quality := 1
 @export_range(4, 24) var nearby_streetlight_budget := 14
 @export_range(0, 12) var nearby_neon_budget := 6
 
@@ -33,6 +34,27 @@ var _night_amount := 0.0
 var _is_night := false
 var _forward_plus := false
 var _configured := false
+var _time_update_interval := 0.5
+var _last_applied_hour := -INF
+var _last_palette := Vector2(INF, INF)
+var _last_material_night := -1.0
+var _selection_dirty := true
+var _lights_enabled := false
+var _last_selection_position := Vector3.INF
+var _street_source_ids: Array[int] = []
+var _neon_source_ids: Array[int] = []
+var _neon_positions: Array[Vector3] = []
+var _street_effective_budget := 14
+var _neon_effective_budget := 6
+var _street_shadow_budget := 1
+var _selection_distance := 4.0
+var _probe_capture_age := 1000.0
+var _probe_capture_interval := 15.0
+var _probe_last_hour := -100.0
+var _probe_last_light := Vector2(-1.0, -1.0)
+var _probe_nudge := 1.0
+var _lamp_lens_transforms: Array[Transform3D] = []
+var _lamp_lenses: MultiMeshInstance3D
 
 
 func configure(city_map: Node3D, sun: DirectionalLight3D, world_env: WorldEnvironment, player_body: Node3D) -> void:
@@ -78,24 +100,29 @@ func configure(city_map: Node3D, sun: DirectionalLight3D, world_env: WorldEnviro
 	_moon.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	add_child(_moon)
 	_discover_fixtures()
+	_build_lamp_lenses()
 	_create_light_pools()
 	_create_probe()
 	_configured = true
-	_apply_time()
-	_update_nearby_lights()
+	_apply_quality()
+	_apply_time(true)
+	_update_nearby_lights(true)
+	_refresh_probe(true)
 
 
 func set_subject(subject: Node3D) -> void:
 	_subject = subject
+	_selection_dirty = true
 	_local_timer = 0.0
 
 
 func set_hour(hour: float) -> void:
 	time_of_day = fposmod(hour, 24.0)
 	if _configured:
-		_apply_time()
-		_update_nearby_lights()
+		_apply_time(true)
+		_update_nearby_lights(true)
 		_refresh_probe(true)
+		_update_timer = _time_update_interval
 
 
 func advance_period() -> void:
@@ -123,51 +150,68 @@ func _process(delta: float) -> void:
 	_update_timer -= delta
 	_local_timer -= delta
 	_probe_timer -= delta
+	_probe_capture_age += delta
 	if _update_timer <= 0.0:
-		_update_timer = 0.15
+		_update_timer = _time_update_interval
 		_apply_time()
 	if _local_timer <= 0.0:
 		_local_timer = 0.6
 		_update_nearby_lights()
 	if _probe_timer <= 0.0:
-		_probe_timer = 15.0
+		_probe_timer = 1.0
 		_refresh_probe()
 
 
-func _apply_time() -> void:
+func _apply_time(force := false) -> void:
+	if not force and is_equal_approx(time_of_day, _last_applied_hour): return
+	_last_applied_hour = time_of_day
 	var solar_phase := (time_of_day - 6.0) / 24.0 * TAU
 	var altitude := sin(solar_phase)
 	var daylight := smoothstep(-0.08, 0.3, altitude)
 	var golden := 1.0 - smoothstep(0.12, 0.55, maxf(altitude, 0.0))
 	_night_amount = 1.0 - smoothstep(-0.12, 0.12, altitude)
-	_sun.rotation_degrees = Vector3(-altitude * 72.0, -115.0 + (time_of_day - 12.0) * 12.0, 0)
-	_sun.light_color = Color("fff1d9").lerp(Color("ffb478"), golden)
-	_sun.light_energy = daylight * lerpf(1.0, 1.65, smoothstep(0.0, 0.7, altitude))
 	_sun.visible = daylight > 0.01
-	_moon.rotation_degrees = Vector3(-48.0, 55.0 + time_of_day * 6.0, 0)
-	_moon.light_energy = _night_amount * 0.24
+	if _sun.visible:
+		_sun.rotation_degrees = Vector3(-altitude * 72.0, -115.0 + (time_of_day - 12.0) * 12.0, 0)
+		_sun.light_color = Color("fff1d9").lerp(Color("ffb478"), golden)
+		_sun.light_energy = daylight * lerpf(1.0, 1.65, smoothstep(0.0, 0.7, altitude))
+	else:
+		_sun.light_energy = 0.0
 	_moon.visible = _night_amount > 0.01
-	_sky_material.sky_top_color = Color("101c3a").lerp(Color("426e9c"), daylight)
-	var horizon := Color("bed5dc").lerp(Color("edac8d"), golden)
-	_sky_material.sky_horizon_color = Color("323447").lerp(horizon, daylight)
-	_sky_material.ground_horizon_color = _sky_material.sky_horizon_color
-	_sky_material.ground_bottom_color = Color("192331").lerp(Color("626669"), daylight)
-	_sky_material.energy_multiplier = lerpf(0.65, 1.0, daylight)
-	_environment.ambient_light_color = Color("8092c2").lerp(Color("b4c4db"), daylight)
-	_environment.ambient_light_energy = lerpf(0.18, 0.48, daylight)
-	_environment.tonemap_exposure = lerpf(1.1, 0.95, daylight)
-	_environment.fog_light_color = Color("252e48").lerp(horizon, daylight)
-	_environment.fog_light_energy = lerpf(0.5, 0.85, daylight)
-	_environment.fog_density = lerpf(0.0016, 0.00075, daylight) + golden * daylight * 0.0003
+	if _moon.visible:
+		_moon.rotation_degrees = Vector3(-48.0, 55.0 + time_of_day * 6.0, 0)
+		_moon.light_energy = _night_amount * 0.24
+	var palette := Vector2(daylight, golden)
+	# Constant noon/night colours must not repeatedly invalidate the sky radiance map.
+	if force or palette.distance_squared_to(_last_palette) > 0.000004:
+		_last_palette = palette
+		_sky_material.sky_top_color = Color("101c3a").lerp(Color("426e9c"), daylight)
+		var horizon := Color("bed5dc").lerp(Color("edac8d"), golden)
+		_sky_material.sky_horizon_color = Color("323447").lerp(horizon, daylight)
+		_sky_material.ground_horizon_color = _sky_material.sky_horizon_color
+		_sky_material.ground_bottom_color = Color("192331").lerp(Color("626669"), daylight)
+		_sky_material.energy_multiplier = lerpf(0.65, 1.0, daylight)
+		_environment.ambient_light_color = Color("8092c2").lerp(Color("b4c4db"), daylight)
+		_environment.ambient_light_energy = lerpf(0.18, 0.48, daylight)
+		_environment.tonemap_exposure = lerpf(1.1, 0.95, daylight)
+		_environment.fog_light_color = Color("252e48").lerp(horizon, daylight)
+		_environment.fog_light_energy = lerpf(0.5, 0.85, daylight)
+		_environment.fog_density = lerpf(0.0016, 0.00075, daylight) + golden * daylight * 0.0003
+		for material in _cloud_materials:
+			material.albedo_color = Color("56617b").lerp(Color("d9e1e5").lerp(Color("e4c8b8"), golden * 0.5), daylight)
 	_environment.ssr_enabled = _forward_plus and screen_space_reflections and _night_amount > 0.15
-	for material in _emission_materials:
-		material.emission_energy_multiplier = lerpf(0.02, 1.45, _night_amount)
-	for material in _lamp_materials:
-		material.emission_energy_multiplier = lerpf(0.0, 1.15, _night_amount)
-	for material in _cloud_materials:
-		material.albedo_color = Color("56617b").lerp(Color("d9e1e5").lerp(Color("e4c8b8"), golden * 0.5), daylight)
-	for material in _road_materials:
-		material.roughness = lerpf(0.8, 0.38, _night_amount)
+	if force or absf(_night_amount - _last_material_night) > 0.002:
+		_last_material_night = _night_amount
+		for material in _emission_materials:
+			material.emission_energy_multiplier = lerpf(0.02, 1.45, _night_amount)
+		for material in _lamp_materials:
+			material.emission_energy_multiplier = lerpf(0.0, 1.15, _night_amount)
+		for material in _road_materials:
+			material.roughness = lerpf(0.8, 0.38, _night_amount)
+		_update_light_energy()
+	if (_night_amount > 0.02) != _lights_enabled:
+		_selection_dirty = true
+		_local_timer = 0.0
 	var night_now := _night_amount > 0.5
 	if night_now != _is_night:
 		_is_night = night_now
@@ -196,6 +240,7 @@ func _discover_fixtures() -> void:
 			var color: Color = [Color("f08fb5"), Color("82d6df"), Color("ffc582")][_neon_sources.size() % 3]
 			var center: Vector3 = mesh.global_transform * mesh.get_aabb().get_center()
 			_neon_sources.append({"position": center, "color": color})
+			_neon_positions.append(center)
 			_override_materials(mesh, "neon", color)
 		elif mesh_name.begins_with("SM_Env_Road_Bare_") or mesh_name.begins_with("SM_Env_Road_0"):
 			_override_materials(mesh, "road", Color.WHITE)
@@ -244,24 +289,35 @@ func _override_materials(mesh: MeshInstance3D, category: String, tint: Color) ->
 
 
 func _add_lamp_lens(lamp_transform: Transform3D) -> void:
-	var lens := MeshInstance3D.new()
+	_lamp_lens_transforms.append(global_transform.affine_inverse() * lamp_transform)
+
+
+func _build_lamp_lenses() -> void:
+	if _lamp_lens_transforms.is_empty(): return
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color("fff2ce")
+	material.emission_enabled = true
+	material.emission = Color("ffdcac")
+	_lamp_materials.append(material)
 	var globe := BoxMesh.new()
 	globe.size = Vector3(0.15, 0.012, 0.46)
-	var material: StandardMaterial3D
-	if _material_cache.has("lamp_lens"):
-		material = _material_cache["lamp_lens"]
-	else:
-		material = StandardMaterial3D.new()
-		material.albedo_color = Color("fff2ce")
-		material.emission_enabled = true
-		material.emission = Color("ffdcac")
-		_lamp_materials.append(material)
-		_material_cache["lamp_lens"] = material
 	globe.material = material
-	lens.mesh = globe
-	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(lens)
-	lens.global_transform = lamp_transform
+	var instances := MultiMesh.new()
+	instances.transform_format = MultiMesh.TRANSFORM_3D
+	instances.mesh = globe
+	instances.instance_count = _lamp_lens_transforms.size()
+	var bounds := AABB()
+	for i in _lamp_lens_transforms.size():
+		var transform := _lamp_lens_transforms[i]
+		instances.set_instance_transform(i, transform)
+		var lens_bounds: AABB = transform * globe.get_aabb()
+		bounds = lens_bounds if i == 0 else bounds.merge(lens_bounds)
+	instances.custom_aabb = bounds
+	_lamp_lenses = MultiMeshInstance3D.new()
+	_lamp_lenses.name = "StreetlampLenses"
+	_lamp_lenses.multimesh = instances
+	_lamp_lenses.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_lamp_lenses)
 
 
 func _create_light_pools() -> void:
@@ -273,13 +329,15 @@ func _create_light_pools() -> void:
 		light.spot_angle = 68.0
 		light.spot_attenuation = 1.0
 		light.spot_angle_attenuation = 0.65
-		light.shadow_enabled = i < 2
+		light.shadow_enabled = false
+		light.distance_fade_shadow = 30.0
 		light.distance_fade_enabled = true
 		light.distance_fade_begin = 65.0
 		light.distance_fade_length = 20.0
 		light.visible = false
 		add_child(light)
 		_street_lights.append(light)
+		_street_source_ids.append(-1)
 	for _i in nearby_neon_budget:
 		var light := OmniLight3D.new()
 		light.omni_range = 8.0
@@ -291,26 +349,72 @@ func _create_light_pools() -> void:
 		light.visible = false
 		add_child(light)
 		_neon_lights.append(light)
+		_neon_source_ids.append(-1)
 
 
-func _update_nearby_lights() -> void:
+func _update_nearby_lights(force := false) -> void:
 	if not is_instance_valid(_subject): return
+	var enabled := _night_amount > 0.02
+	if not enabled:
+		if _lights_enabled or force:
+			for light in _street_lights:
+				light.visible = false
+				light.shadow_enabled = false
+			for light in _neon_lights: light.visible = false
+		_lights_enabled = false
+		return
 	var subject_position := _subject.global_position
-	_lamp_positions.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.distance_squared_to(subject_position) < b.distance_squared_to(subject_position))
-	for i in _street_lights.size():
-		var light := _street_lights[i]
-		light.visible = _night_amount > 0.02 and i < _lamp_positions.size() and _lamp_positions[i].distance_squared_to(subject_position) < 85.0 * 85.0
-		if light.visible:
-			light.global_position = _lamp_positions[i]
-			light.light_energy = 2.6 * _night_amount
-	_neon_sources.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.position.distance_squared_to(subject_position) < b.position.distance_squared_to(subject_position))
-	for i in _neon_lights.size():
-		var light := _neon_lights[i]
-		light.visible = _night_amount > 0.02 and i < _neon_sources.size() and _neon_sources[i].position.distance_squared_to(subject_position) < 50.0 * 50.0
-		if light.visible:
-			light.global_position = _neon_sources[i].position
-			light.light_color = _neon_sources[i].color
-			light.light_energy = 1.4 * _night_amount
+	if not force and not _selection_dirty and _lights_enabled and subject_position.distance_squared_to(_last_selection_position) < _selection_distance * _selection_distance:
+		return
+	_selection_dirty = false
+	_lights_enabled = true
+	_last_selection_position = subject_position
+	var streets := _nearest_sources(_lamp_positions, _street_source_ids, _street_effective_budget, 85.0, subject_position)
+	var neons := _nearest_sources(_neon_positions, _neon_source_ids, _neon_effective_budget, 50.0, subject_position)
+	_assign_sources(_street_lights, _street_source_ids, streets, _lamp_positions, false)
+	_assign_sources(_neon_lights, _neon_source_ids, neons, _neon_positions, true)
+	var shadow_distance := 45.0 if quality == 2 else 30.0
+	for slot in _street_lights.size():
+		var source := _street_source_ids[slot]
+		var rank := streets.find(source)
+		_street_lights[slot].shadow_enabled = rank >= 0 and rank < _street_shadow_budget and _lamp_positions[source].distance_squared_to(subject_position) < shadow_distance * shadow_distance
+	_update_light_energy()
+
+
+func _nearest_sources(positions: Array[Vector3], previous: Array[int], budget: int, radius: float, origin: Vector3) -> Array[int]:
+	var selected: Array[int] = []
+	var distances: Array[float] = []
+	distances.resize(positions.size())
+	for i in positions.size():
+		var distance := positions[i].distance_squared_to(origin)
+		# A small retention bias prevents pool slots swapping at distance ties.
+		distances[i] = distance * (0.90 if i in previous else 1.0)
+		if distance < radius * radius: selected.append(i)
+	selected.sort_custom(func(a: int, b: int) -> bool: return distances[a] < distances[b])
+	if selected.size() > budget: selected.resize(budget)
+	return selected
+
+
+func _assign_sources(lights: Array, slots: Array[int], selected: Array[int], positions: Array[Vector3], neon: bool) -> void:
+	# Keep each physical lamp in its existing slot, including its cached shadow map.
+	for i in slots.size():
+		if slots[i] not in selected:
+			slots[i] = -1
+			lights[i].visible = false
+	for source in selected:
+		var slot := slots.find(source)
+		if slot < 0:
+			slot = slots.find(-1)
+			if slot < 0: break
+			slots[slot] = source
+			lights[slot].global_position = positions[source]
+			if neon: lights[slot].light_color = _neon_sources[source].color
+		lights[slot].visible = true
+
+
+func _update_light_energy() -> void:
+	for light in _street_lights: light.light_energy = 2.6 * _night_amount
+	for light in _neon_lights: light.light_energy = 1.4 * _night_amount
 
 
 func _create_probe() -> void:
@@ -324,14 +428,52 @@ func _create_probe() -> void:
 	_probe.update_mode = ReflectionProbe.UPDATE_ONCE
 	_probe.blend_distance = 15.0
 	add_child(_probe)
-	_refresh_probe(true)
 
 
 func _refresh_probe(force := false) -> void:
 	if not is_instance_valid(_subject) or not is_instance_valid(_probe): return
+	if not force and _probe_capture_age < _probe_capture_interval: return
 	var target := _subject.global_position + Vector3.UP * 4.0
-	if force or _probe.global_position.distance_to(target) > 35.0:
-		_probe.global_position = target
-	else:
-		# UPDATE_ONCE recaptures over six frames after a transform change.
-		_probe.position.x += 0.001
+	var moved := _probe.global_position.distance_squared_to(target) > 35.0 * 35.0
+	var hour_delta := absf(wrapf(time_of_day - _probe_last_hour, -12.0, 12.0))
+	var light_state := Vector2(_environment.ambient_light_energy, _night_amount)
+	var lighting_changed := hour_delta >= (0.4 if quality == 2 else 0.75) or absf(light_state.y - _probe_last_light.y) > 0.12 or absf(light_state.x - _probe_last_light.x) > 0.06
+	if not force and not moved and not lighting_changed: return
+	_probe_capture_age = 0.0
+	_probe_last_hour = time_of_day
+	_probe_last_light = light_state
+	# UPDATE_ONCE renders six faces. Only request them for a changed view/lighting.
+	_probe_nudge = -_probe_nudge
+	_probe.global_position = target + Vector3(_probe_nudge * 0.001, 0.0, 0.0)
+
+
+func set_quality(level: int) -> void:
+	var selected := clampi(level, 0, 2)
+	if selected == quality: return
+	quality = selected
+	if not _configured: return
+	_apply_quality()
+	_apply_time(true)
+	_update_nearby_lights(true)
+	_refresh_probe(true)
+
+
+func _apply_quality() -> void:
+	quality = clampi(quality, 0, 2)
+	_time_update_interval = [1.0, 0.5, 0.25][quality]
+	_street_effective_budget = mini(_street_lights.size(), 8 if quality == 0 else nearby_streetlight_budget)
+	_neon_effective_budget = mini(_neon_lights.size(), 3 if quality == 0 else nearby_neon_budget)
+	_street_shadow_budget = [0, 1, 2][quality]
+	_selection_distance = [6.0, 4.0, 3.0][quality]
+	_probe_capture_interval = [25.0, 15.0, 8.0][quality]
+	_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if quality == 2 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	_sun.directional_shadow_max_distance = 90.0 if quality == 0 else 150.0
+	# Preserve the first 15m cascade; savings come from merging the farther cascades.
+	_sun.directional_shadow_split_1 = 15.0 / _sun.directional_shadow_max_distance
+	_environment.sky.radiance_size = Sky.RADIANCE_SIZE_64 if quality == 0 else Sky.RADIANCE_SIZE_128
+	_environment.ssr_max_steps = [12, 24, 32][quality]
+	_probe.mesh_lod_threshold = [6.0, 4.0, 3.0][quality]
+	for light in _street_lights: light.distance_fade_shadow = 45.0 if quality == 2 else 30.0
+	_selection_dirty = true
+	_update_timer = 0.0
+	_local_timer = 0.0

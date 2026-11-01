@@ -33,6 +33,7 @@ var notification_label: Label
 var notification_time := 0.0
 var pending_notifications: Array[String] = []
 var gameplay: Dictionary = {}
+var _status_tick := 0.0
 
 
 func _ready() -> void:
@@ -120,14 +121,17 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	_refresh_status()
+	_status_tick -= delta
+	if _status_tick <= 0.000001:
+		_status_tick = maxf(_status_tick + 0.05, 0.0)
+		_refresh_status()
+		if is_instance_valid(player_body): radar.queue_redraw()
 	if notification_time > 0:
 		notification_time = maxf(0, notification_time - delta)
 		notification_panel.modulate.a = minf(notification_time * 2.0, 1.0)
 		if notification_time <= 0 and not pending_notifications.is_empty():
 			_show_notification(pending_notifications.pop_front())
 	notification_panel.visible = notification_time > 0
-	if is_instance_valid(player_body): radar.queue_redraw()
 
 
 func _refresh_status() -> void:

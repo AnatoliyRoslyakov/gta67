@@ -11,6 +11,8 @@ var reserve := 84
 var player_health := 100.0
 var vehicle_health: Dictionary = {}
 var load_warning := ""
+var _last_saved_json := ""
+var _last_saved_path := ""
 
 
 func load_progress() -> void:
@@ -40,12 +42,18 @@ func save_progress() -> Error:
 		"total_earned": total_earned, "best_circuit": best_circuit,
 		"magazine": magazine, "reserve": reserve, "player_health": player_health,
 		"vehicle_health": vehicle_health}
+	var serialized := JSON.stringify(payload)
+	if serialized == _last_saved_json and save_path == _last_saved_path: return OK
 	var temporary := save_path + ".tmp"
 	var file := FileAccess.open(temporary, FileAccess.WRITE)
 	if file == null: return FileAccess.get_open_error()
-	file.store_string(JSON.stringify(payload))
+	file.store_string(serialized)
 	file.flush()
 	var result := file.get_error()
 	file.close()
 	if result != OK: return result
-	return DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(save_path))
+	result = DirAccess.rename_absolute(ProjectSettings.globalize_path(temporary), ProjectSettings.globalize_path(save_path))
+	if result == OK:
+		_last_saved_json = serialized
+		_last_saved_path = save_path
+	return result

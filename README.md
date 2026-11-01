@@ -14,9 +14,15 @@ Gunfire and serious collisions caused by the player attract one to three police 
 
 Cash, completed jobs, circuit record, ammunition, health and each selected car's condition save automatically in `user://gta67_progress.json`. Progress is saved after transactions, every 20 seconds and on exit; active jobs and police pursuits are session-only. Pausing freezes city traffic and mission timers. Selecting a different car cancels an active job and is unavailable during a pursuit.
 
+The city menu includes Economy, Balanced and Quality graphics presets, saved locally in `user://gta67_graphics.cfg`. Balanced is the default: 60 FPS, native 3D resolution, 2× MSAA, two sun-shadow cascades and bounded nearby lighting. Economy targets 30 FPS with 80% 3D resolution and smaller light budgets; Quality retains 4× MSAA and four sun-shadow cascades at 60 FPS. The UI stays at full resolution. Paused/selector windows are capped at 30 FPS and unfocused windows at 15 FPS; losing focus pauses gameplay.
+
+Resources load in background threads with a progress overlay and are reused when changing cars. Small static props are distance-culled; buildings, roads and collision bodies remain. Traffic searches spatial buckets instead of scanning every car. Obstacle sensing runs at 20 Hz for cars and 12 Hz for pedestrians, while collisions and driving physics remain at 120 Hz. Offscreen animation, HUD, light and reflection updates have separate budgets. Audio buffers and police routes are shared; silent sirens stop playback. Unchanged progress no longer causes repeated disk writes.
+
+On the development Mac (M1 Pro, 1280×720, stationary day/night views, equal 60 FPS cap), physics processing fell from about 4.4 ms to 3.4–3.5 ms and daytime draw calls from about 2,562 to 1,776. These short scene measurements are not a thermal endurance test; performance varies with camera, resolution and hardware.
+
 Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
 
-This version is on branch `2.0.0`. Purchased models, textures and map files are never included in commits.
+This version is on branch `2.0.1`. Purchased models, textures and map files are never included in commits.
 
 ## Controls
 

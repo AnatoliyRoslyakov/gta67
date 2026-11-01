@@ -20,6 +20,7 @@ var spawn_transform := Transform3D.IDENTITY
 var vehicle_health := 100.0
 var gameplay: Node
 var _back_callback: Callable
+var _hud_tick := 0.0
 var reflections_enabled := true
 var status_message := ""
 var status_time := 0.0
@@ -56,6 +57,7 @@ func _ready() -> void:
 	atmosphere = Atmosphere.new()
 	atmosphere.screen_space_reflections = reflections_enabled
 	add_child(atmosphere)
+	atmosphere.set_quality(CityPerformance.quality)
 	atmosphere.configure($CityMap, $DirectionalLight3D, $WorldEnvironment, player_body)
 	atmosphere.set_hour([6.5, 12.0, 17.5, 22.0][mood])
 	atmosphere.night_changed.connect(func(night: bool): player_body.set_headlights(night))
@@ -76,9 +78,16 @@ func _ready() -> void:
 	gameplay = CityExperience.new()
 	add_child(gameplay)
 	gameplay.configure(self, _back_callback)
+	CityPerformance.bind_town(self)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _physics_process(delta: float) -> void:
+	status_time = maxf(0, status_time - delta)
+	if player_body.global_position.y < -12 or (not driving and character.global_position.y < -12):
+		gameplay.recover_world_fall()
+	_hud_tick -= delta
+	if _hud_tick > 0.000001: return
+	_hud_tick = maxf(_hud_tick + 0.05, 0.0)
 	gta_hud.cash = cash
 	gta_hud.wanted_level = wanted_level
 	gta_hud.clock_text = atmosphere.get_clock_text()
@@ -95,12 +104,10 @@ func _physics_process(delta: float) -> void:
 	if gameplay:
 		var action_hint: String = gameplay.context_hint()
 		if not action_hint.is_empty(): gta_hud.hint = action_hint
-	status_time = maxf(0, status_time - delta)
 	if status_time > 0: gta_hud.hint = status_message
-	if player_body.global_position.y < -12 or (not driving and character.global_position.y < -12):
-		gameplay.recover_world_fall()
 
 func _input(event: InputEvent) -> void:
+	if CityPerformance.loading: return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_E: _interact()
 		elif event.physical_keycode == KEY_F5: gameplay.recover_vehicle()

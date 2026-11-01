@@ -23,11 +23,23 @@ var _search_index := 0
 var _busted_emitted := false
 var _was_seen := false
 var rng := RandomNumberGenerator.new()
+var _audible_unit: CharacterBody3D
+var _lane_states: Array[Vector3i] = []
+var _lane_positions: Dictionary = {}
+var _reverse_lanes: Dictionary = {}
+var _route_fields: Dictionary = {}
+var _field_goals: Array[String] = []
+var _graph_world_id := 0
+var _last_destination := Vector3.INF
+var _last_goals: Array[Vector3i] = []
+var _last_goal_key := ""
 
 
 func configure(scene: Node3D) -> void:
 	town = scene
 	rng.randomize()
+	# Prepare the immutable sound during city loading, before a pursuit can spawn.
+	PoliceCar.prepare_audio()
 
 
 func report_crime(severity: int, origin: Vector3) -> void:
@@ -54,6 +66,7 @@ func clear_wanted() -> void:
 	unseen_time = 0
 	arrest_time = 0
 	_busted_emitted = false
+	_audible_unit = null
 	for unit in units:
 		if not is_instance_valid(unit): continue
 		if is_instance_valid(town) and is_instance_valid(town.traffic): town.traffic.drivers.erase(unit)
@@ -74,7 +87,9 @@ func get_state() -> Dictionary:
 
 
 func _physics_process(delta: float) -> void:
-	if level <= 0 or not is_instance_valid(town) or not is_instance_valid(town.traffic) or not town.traffic.initialized: return
+	if not is_instance_valid(town) or not is_instance_valid(town.traffic) or not town.traffic.initialized: return
+	_ensure_route_graph()
+	if level <= 0: return
 	response_age += delta
 	_sense_tick -= delta
 	_route_tick -= delta
@@ -164,10 +179,19 @@ func _sense_subject() -> void:
 	elif _was_seen:
 		notification.emit("Полиция потеряла вас. Не возвращайтесь к патрулям")
 	_was_seen = seen
+	var light_unit := closest if closest_distance < 30 * 30 else null
+	# Keep a nearby voice until another patrol is substantially closer; crossing
+	# distance rankings should not repeatedly stop and restart both sirens.
+	if is_instance_valid(_audible_unit) and _audible_unit.damage <= 70:
+		var audible_distance := _audible_unit.global_position.distance_squared_to(subject.global_position)
+		if audible_distance <= 75 * 75 and (closest == _audible_unit or closest_distance >= audible_distance * 0.64):
+			closest = _audible_unit
+			closest_distance = audible_distance
+	_audible_unit = closest if closest_distance < 75 * 75 else null
 	for unit in units:
 		if not is_instance_valid(unit): continue
-		unit.audible = unit == closest and closest_distance < 75 * 75
-		unit.near_player = unit == closest and closest_distance < 30 * 30
+		unit.audible = unit == _audible_unit
+		unit.near_player = unit == light_unit
 
 
 func _can_see(unit: CharacterBody3D, subject: Node3D) -> bool:
@@ -184,24 +208,25 @@ func _spawn_unit() -> void:
 	var world: Node3D = town.traffic
 	var subject := _subject()
 	var camera := get_viewport().get_camera_3d()
-	var candidates: Array = world.lanes.keys()
+	_ensure_route_graph()
+	var candidates: Array[Vector3i] = _lane_states.duplicate()
 	var best_path: Array[Vector3i] = []
 	var best_state := Vector3i.ZERO
 	var best_point := Vector3.ZERO
 	var considered := 0
-	for index in range(candidates.size() - 1, 0, -1):
-		var other := rng.randi_range(0, index)
-		var swap = candidates[index]
-		candidates[index] = candidates[other]
-		candidates[other] = swap
-	for candidate: Vector3i in candidates:
+	for index in candidates.size():
+		# Shuffle only the candidates examined before a valid spawn is found.
+		var other_index := rng.randi_range(index, candidates.size() - 1)
+		var candidate := candidates[other_index]
+		candidates[other_index] = candidates[index]
+		candidates[index] = candidate
 		if world.junction_cells.has(Vector2i(candidate.x, candidate.y)): continue
-		var point: Vector3 = world.lane_position(candidate)
-		var distance := point.distance_to(subject.global_position)
-		if distance < 48 or distance > 110: continue
+		var point: Vector3 = _lane_positions[candidate]
+		var distance := point.distance_squared_to(subject.global_position)
+		if distance < 48 * 48 or distance > 110 * 110: continue
 		var occupied := false
 		for other in world.drivers:
-			if is_instance_valid(other) and other.global_position.distance_to(point) < 11:
+			if is_instance_valid(other) and other.global_position.distance_squared_to(point) < 11 * 11:
 				occupied = true
 				break
 		if occupied or not world._spawn_clear(point, Vector3(2.0, 1.8, 4.6), candidate.z * PI / 2): continue
@@ -209,7 +234,7 @@ func _spawn_unit() -> void:
 			var obstruction := PhysicsRayQueryParameters3D.create(camera.global_position, point + Vector3.UP, 1, [town.player_body.get_rid()])
 			if get_world_3d().direct_space_state.intersect_ray(obstruction).is_empty(): continue
 		var path := _route_to(candidate, last_known)
-		if path.size() < 2 or world.lane_position(path[-1]).distance_to(last_known) > 25: continue
+		if path.size() < 2 or (_lane_positions[path[-1]] as Vector3).distance_squared_to(last_known) > 25 * 25: continue
 		considered += 1
 		if best_path.is_empty() or path.size() < best_path.size():
 			best_path = path
@@ -232,17 +257,84 @@ func _spawn_unit() -> void:
 
 func _route_to(start: Vector3i, destination: Vector3) -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
+	_ensure_route_graph()
+	if not _lane_positions.has(start): return result
+	if destination != _last_destination:
+		_last_destination = destination
+		var nearest := INF
+		_last_goals.clear()
+		for state: Vector3i in _lane_states:
+			var distance: float = _lane_positions[state].distance_squared_to(destination)
+			if distance < nearest:
+				nearest = distance
+				_last_goals.clear()
+				_last_goals.append(state)
+			elif distance == nearest:
+				_last_goals.append(state)
+		_last_goal_key = str(_last_goals)
+	var field := _route_field(_last_goal_key, _last_goals)
+	# Disconnected one-way components retain the original nearest-reachable rule.
+	if not field.has(start): return _route_reachable(start, destination)
+	var step := start
+	result.append(step)
+	while field[step] != step:
+		step = field[step]
+		result.append(step)
+	return result
+
+
+func _ensure_route_graph() -> void:
 	var world: Node3D = town.traffic
-	if not world.lanes.has(start): return result
+	if _graph_world_id == world.get_instance_id() and _lane_states.size() == world.lanes.size(): return
+	_graph_world_id = world.get_instance_id()
+	_lane_states.assign(world.lanes.keys())
+	_lane_positions.clear()
+	_reverse_lanes.clear()
+	_route_fields.clear()
+	_field_goals.clear()
+	_last_destination = Vector3.INF
+	for state: Vector3i in _lane_states:
+		_lane_positions[state] = world.lane_position(state)
+		_reverse_lanes[state] = []
+	for state: Vector3i in _lane_states:
+		for next: Vector3i in world.lanes[state]:
+			if _reverse_lanes.has(next): _reverse_lanes[next].append(state)
+
+
+func _route_field(key: String, goals: Array[Vector3i]) -> Dictionary:
+	if _route_fields.has(key): return _route_fields[key]
+	var toward_goal := {}
+	var queue: Array[Vector3i] = goals.duplicate()
+	# All headings at the closest point are valid. Multi-source BFS preserves
+	# the shortest arrival instead of forcing a loop to one arbitrary heading.
+	for goal in goals: toward_goal[goal] = goal
+	var cursor := 0
+	while cursor < queue.size():
+		var current := queue[cursor]
+		cursor += 1
+		for previous: Vector3i in _reverse_lanes[current]:
+			if toward_goal.has(previous): continue
+			toward_goal[previous] = current
+			queue.append(previous)
+	# A few pursuit/search targets suffice without retaining every visited road.
+	if _field_goals.size() >= 4: _route_fields.erase(_field_goals.pop_front())
+	_field_goals.append(key)
+	_route_fields[key] = toward_goal
+	return toward_goal
+
+
+func _route_reachable(start: Vector3i, destination: Vector3) -> Array[Vector3i]:
+	var result: Array[Vector3i] = []
+	var world: Node3D = town.traffic
 	var queue: Array[Vector3i] = [start]
 	var previous := {start: start}
 	var cursor := 0
 	var closest := start
-	var nearest: float = world.lane_position(start).distance_squared_to(destination)
+	var nearest: float = _lane_positions[start].distance_squared_to(destination)
 	while cursor < queue.size():
 		var current := queue[cursor]
 		cursor += 1
-		var distance: float = world.lane_position(current).distance_squared_to(destination)
+		var distance: float = _lane_positions[current].distance_squared_to(destination)
 		if distance < nearest:
 			nearest = distance
 			closest = current
@@ -261,10 +353,10 @@ func _route_to(start: Vector3i, destination: Vector3) -> Array[Vector3i]:
 
 func _search_destination(unit: CharacterBody3D) -> Vector3:
 	var options: Array[Vector3] = []
-	for state: Vector3i in town.traffic.lanes:
-		var point: Vector3 = town.traffic.lane_position(state)
-		var distance := point.distance_to(last_known)
-		if distance > 15 and distance < 35 and point.distance_to(unit.global_position) > 12: options.append(point)
+	for state: Vector3i in _lane_states:
+		var point: Vector3 = _lane_positions[state]
+		var distance := point.distance_squared_to(last_known)
+		if distance > 15 * 15 and distance < 35 * 35 and point.distance_squared_to(unit.global_position) > 12 * 12: options.append(point)
 	if options.is_empty(): return last_known
 	_search_index += 1
 	return options[_search_index % options.size()]

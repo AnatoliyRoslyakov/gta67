@@ -25,11 +25,18 @@ const VEHICLES := [
 @onready var slider_volume: HSlider = %Volume
 
 @onready var loading_screen: PanelContainer = %LoadingPanel
+@onready var loading_text: Label = %LoadingPanel/CenterContainer/Label
 
 var town: Node3D = null
 var _loading := false
+var _loaded_scenes: Dictionary = {}
 
 func _ready() -> void:
+	$Subtitle.text = "v%s   ·   Truck Town   ·   Choose your vehicle" % ProjectSettings.get_setting("application/config/version", "2.0.1")
+	var loading_layer := CanvasLayer.new()
+	loading_layer.layer = 100
+	add_child(loading_layer)
+	loading_screen.reparent(loading_layer)
 	for vehicle in VEHICLES:
 		var button := Button.new()
 		button.text = vehicle[0]
@@ -61,18 +68,50 @@ func focus_first_car() -> void:
 func _load_vehicle(vehicle: Array) -> void:
 	if _loading or is_instance_valid(town): return
 	_loading = true
+	CityPerformance.loading = true
 	# Show loading screen and wait for it to be rendered
 	loading_screen.visible = true
+	loading_text.text = "Загрузка города…"
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var car: Node3D = preload("res://vehicles/car_base.tscn").instantiate()
+	var model_path := "res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle[1]
+	var paths := ["res://town/town_scene.tscn", "res://vehicles/car_base.tscn", model_path]
+	for path in paths:
+		if _loaded_scenes.has(path): continue
+		if ResourceLoader.load_threaded_request(path, "PackedScene") != OK:
+			_loading_failed()
+			return
+	var complete := false
+	while not complete:
+		complete = true
+		var total := 0.0
+		for path in paths:
+			if _loaded_scenes.has(path):
+				total += 1.0
+				continue
+			var progress: Array = []
+			var status := ResourceLoader.load_threaded_get_status(path, progress)
+			if status == ResourceLoader.THREAD_LOAD_FAILED or status == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+				_loading_failed()
+				return
+			if status == ResourceLoader.THREAD_LOAD_LOADED:
+				_loaded_scenes[path] = ResourceLoader.load_threaded_get(path)
+				total += 1.0
+			else:
+				complete = false
+				if not progress.is_empty(): total += float(progress[0])
+		loading_text.text = "Загрузка города · %d%%" % roundi(total / paths.size() * 100)
+		await get_tree().process_frame
+	var car: Node3D = _loaded_scenes["res://vehicles/car_base.tscn"].instantiate()
 	car.name = "car"
 	var body := car.get_child(0) as VehicleBody3D
 	body.set_script(preload("res://vehicles/polygon_vehicle.gd"))
-	body.vehicle_scene = load("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle[1])
+	body.vehicle_scene = _loaded_scenes[model_path]
 	body.engine_force_value = vehicle[2]
-	town = preload("res://town/town_scene.tscn").instantiate()
+	loading_text.text = "Подготовка улиц и транспорта…"
+	await get_tree().process_frame
+	town = _loaded_scenes["res://town/town_scene.tscn"].instantiate()
 
 	if button_sunrise.button_pressed:
 		town.mood = town.Mood.SUNRISE
@@ -86,11 +125,35 @@ func _load_vehicle(vehicle: Array) -> void:
 	town.setup(car, _on_back_pressed, button_reflections.button_pressed)
 
 	get_parent().add_child(town)
+	town.player_body.set_controlled(false)
+	# Keep the loading overlay while the first shader variants and city actors
+	# are prepared, rather than exposing those startup frames as gameplay.
+	while not town.traffic.initialized:
+		await get_tree().process_frame
+	if DisplayServer.get_name() != "headless": await RenderingServer.frame_post_draw
+	town.player_body.set_controlled(true)
+	loading_screen.hide()
 	hide()
 	_loading = false
+	CityPerformance.loading = false
+	if not CityPerformance._focused: town.gameplay.open_menu()
+
+
+func _loading_failed() -> void:
+	_loading = false
+	CityPerformance.loading = false
+	loading_screen.hide()
+	var message := AcceptDialog.new()
+	message.dialog_text = "Не удалось загрузить город. Проверьте локальную папку Assets/Synty/PolygonCity."
+	message.title = "Загрузка города"
+	message.confirmed.connect(message.queue_free)
+	message.canceled.connect(message.queue_free)
+	add_child(message)
+	message.popup_centered()
 
 
 func _on_back_pressed() -> void:
+	if _loading: return
 	if is_instance_valid(town):
 		# Currently in the town, go back to main menu.
 		town.queue_free()

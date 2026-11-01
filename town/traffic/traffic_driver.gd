@@ -20,12 +20,23 @@ var brake_lights: Array[MeshInstance3D] = []
 var turn_lights: Array[MeshInstance3D] = []
 var damage := 0.0
 var wheel_distance := 0.0
+var _traffic_sensor_tick := 0.0
+var _traffic_obstacle_speed := INF
+var _traffic_ray: PhysicsRayQueryParameters3D
+var _traffic_visual_elapsed := 0.0
+var _traffic_visual_interval := 1.0 / 30.0
+var _traffic_brake_energy := -1.0
+var _traffic_turn_state := -1
+var _traffic_night_initialized := false
 
 
 func _ready() -> void:
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4 | 8
 	add_to_group("traffic")
+	_traffic_ray = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()])
+	_traffic_sensor_tick = float(get_instance_id() % 6) / 120.0
+	_traffic_visual_elapsed = float(get_instance_id() % 4) / 120.0
 	model = model_scene.instantiate()
 	_remove_physics(model)
 	add_child(model)
@@ -108,25 +119,18 @@ func _physics_process(delta: float) -> void:
 	if offset.length() < 0.45:
 		state = next_state
 		next_state = world.choose_lane(state)
+		_traffic_sensor_tick = 0.0
 		target = world.lane_position(next_state)
 		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
 	var direction := offset.normalized()
 	var desired := cruise_speed
 	if next_state.z != state.z: desired = minf(desired, 4.0)
 	desired = minf(desired, world.approach_speed(self, state, next_state))
-	var lookahead := maxf(9, speed * 2.2)
-	for other in world.drivers:
-		if other == self: continue
-		var relative: Vector3 = other.global_position - global_position
-		var ahead := relative.dot(direction)
-		var lateral := absf(relative.x * direction.z - relative.z * direction.x)
-		if ahead > 0 and ahead < lookahead and lateral < 2.1:
-			desired = minf(desired, maxf(0, (ahead - 6) / 1.7))
-	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, global_position + Vector3.UP + direction * lookahead, 1 | 2 | 4 | 8, [get_rid()])
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if not hit.is_empty():
-		var gap: float = global_position.distance_to(hit.position)
-		desired = minf(desired, maxf(0, (gap - 3.5) / 1.5))
+	_traffic_sensor_tick -= delta
+	if _traffic_sensor_tick <= 0.0:
+		_traffic_sensor_tick += 0.05
+		_traffic_obstacle_speed = _sense_obstacles(direction, maxf(9, speed * 2.2))
+	desired = minf(desired, _traffic_obstacle_speed)
 	if damage > 70: desired = 0
 	var braking := desired < speed - 0.5
 	speed = move_toward(speed, desired, delta * (6.5 if braking else 2.0))
@@ -139,30 +143,61 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	speed = Vector2(velocity.x, velocity.z).length()
 	wheel_distance += velocity.dot(global_basis.z) * delta
-	var wheel_steer := clampf(angle_difference(rotation.y, atan2(direction.x, direction.z)), -0.5, 0.5)
-	for wheel in wheel_visuals:
-		var steering_basis := Basis(Vector3.UP, wheel_steer if wheel.front else 0.0)
-		wheel.pivot.basis = steering_basis * Basis(Vector3.RIGHT, fmod(wheel_distance / wheel.radius, TAU))
+	_traffic_visual_elapsed += delta
+	if _traffic_visual_elapsed + 0.000001 >= _traffic_visual_interval:
+		_traffic_visual_elapsed = fmod(_traffic_visual_elapsed, _traffic_visual_interval)
+		var wheel_steer := clampf(angle_difference(rotation.y, atan2(direction.x, direction.z)), -0.5, 0.5)
+		for wheel in wheel_visuals:
+			var steering_basis := Basis(Vector3.UP, wheel_steer if wheel.front else 0.0)
+			wheel.pivot.basis = steering_basis * Basis(Vector3.RIGHT, fmod(wheel_distance / wheel.radius, TAU))
 	light_tick -= delta
 	if light_tick <= 0:
-		light_tick = 0.5
+		light_tick += 0.5
 		_update_night_lights()
-	for lamp in brake_lights:
-		var material := lamp.material_override as StandardMaterial3D
-		material.emission_energy_multiplier = 2.5 if braking or desired < 0.1 else (0.65 if lights_at_night else 0.0)
-	for i in turn_lights.size():
-		var material := turn_lights[i].material_override as StandardMaterial3D
-		var turn_direction := posmod(next_state.z - state.z, 4)
-		var turning := ((turn_direction == 1 and i == 1) or (turn_direction == 3 and i == 0)) and fmod(world.elapsed, 0.8) < 0.4
-		material.emission_energy_multiplier = 2 if turning else 0
+	var brake_energy := 2.5 if braking or desired < 0.1 else (0.65 if lights_at_night else 0.0)
+	if brake_energy != _traffic_brake_energy:
+		_traffic_brake_energy = brake_energy
+		for lamp in brake_lights:
+			(lamp.material_override as StandardMaterial3D).emission_energy_multiplier = brake_energy
+	var turn_direction := posmod(next_state.z - state.z, 4)
+	var turn_state := turn_direction if (turn_direction == 1 or turn_direction == 3) and fmod(world.elapsed, 0.8) < 0.4 else 0
+	if turn_state != _traffic_turn_state:
+		_traffic_turn_state = turn_state
+		for i in turn_lights.size():
+			var lit := (turn_state == 1 and i == 1) or (turn_state == 3 and i == 0)
+			(turn_lights[i].material_override as StandardMaterial3D).emission_energy_multiplier = 2.0 if lit else 0.0
+
+
+func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
+	var limit := INF
+	var origin := global_position
+	# Braking gaps include travel between sensor samples; collision movement still runs at 120 Hz.
+	var reaction_margin := maxf(speed, cruise_speed) * 0.05
+	for other in world.nearby_drivers(origin, lookahead + 3.0):
+		if other == self: continue
+		var relative: Vector3 = other.global_position - origin
+		var ahead := relative.dot(direction)
+		var lateral := absf(relative.x * direction.z - relative.z * direction.x)
+		if ahead > 0 and ahead < lookahead and lateral < 2.1:
+			limit = minf(limit, maxf(0, (ahead - 6.0 - reaction_margin) / 1.7))
+	_traffic_ray.from = origin + Vector3.UP
+	_traffic_ray.to = _traffic_ray.from + direction * lookahead
+	var hit := get_world_3d().direct_space_state.intersect_ray(_traffic_ray)
+	if not hit.is_empty():
+		var gap: float = origin.distance_to(hit.position)
+		limit = minf(limit, maxf(0, (gap - 3.5 - reaction_margin) / 1.5))
+	return limit
 
 
 func _update_night_lights() -> void:
 	var atmosphere: Node = world.get_parent().get("atmosphere") if world.get_parent() else null
-	lights_at_night = is_instance_valid(atmosphere) and atmosphere.has_method("is_night") and atmosphere.is_night()
-	for lamp in headlights:
-		var material := lamp.material_override as StandardMaterial3D
-		material.emission_energy_multiplier = 2.0 if lights_at_night else 0.0
+	var night: bool = is_instance_valid(atmosphere) and atmosphere.has_method("is_night") and atmosphere.is_night()
+	if not _traffic_night_initialized or night != lights_at_night:
+		_traffic_night_initialized = true
+		lights_at_night = night
+		for lamp in headlights:
+			(lamp.material_override as StandardMaterial3D).emission_energy_multiplier = 2.0 if lights_at_night else 0.0
+	_traffic_visual_interval = 1.0 / 60.0 if is_instance_valid(world.subject) and global_position.distance_squared_to(world.subject.global_position) < 625.0 else 1.0 / 30.0
 	# Emissive lamps remain visible on every car; only four nearest cars
 	# illuminate the road, without shadows or per-frame ranking work.
 	var subject: Node3D = world.subject
@@ -174,7 +209,7 @@ func _update_night_lights() -> void:
 		headlight_beam.visible = false
 		return
 	var nearer := 0
-	for other in world.drivers:
+	for other in world.nearby_drivers(subject.global_position, 30.0):
 		if other == self or not is_instance_valid(other): continue
 		var other_distance: float = other.global_position.distance_squared_to(subject.global_position)
 		if other_distance < distance or (is_equal_approx(other_distance, distance) and other.get_instance_id() < get_instance_id()): nearer += 1

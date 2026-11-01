@@ -20,12 +20,17 @@ var walk_steps := 0
 var animation_elapsed := 0.0
 var animation_interval := 1.0 / 30.0
 var animation_lod_timer := 0.0
+var _sensor_tick := 0.0
+var _obstructed := false
+var _obstacle_ray: PhysicsRayQueryParameters3D
+var _crossing_target := -1
 
 
 func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 1 | 2 | 4 | 8
 	add_to_group("pedestrians")
+	_obstacle_ray = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()])
 	var wrapper := model_scene.instantiate()
 	model = wrapper.get_node("GeneralSkeleton")
 	wrapper.remove_child(model)
@@ -48,9 +53,12 @@ func _ready() -> void:
 	add_child(collider)
 	previous_cell = cell
 	_choose_next()
+	_sensor_tick = phase_offset / 12.0
 
 
 func _choose_next() -> void:
+	_sensor_tick = 0.0
+	_crossing_target = -1
 	var options: Array = world.walk_neighbors.get(cell, []).duplicate()
 	if options.is_empty(): target_cell = cell; return
 	if options.size() > 1: options.erase(previous_cell)
@@ -63,6 +71,7 @@ func _choose_next() -> void:
 		var straight := cell + (cell - previous_cell)
 		if straight in options and world.rng.randf() < 0.8: target_cell = straight
 		else: target_cell = options[world.rng.randi_range(0, options.size() - 1)]
+	_crossing_target = world.crossing_edges.get(world._edge_key(cell, target_cell), -1)
 
 
 func _physics_process(delta: float) -> void:
@@ -81,15 +90,19 @@ func _physics_process(delta: float) -> void:
 		target = world.walk_position(target_cell)
 		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
 	var can_walk := idle_time <= 0 and knockdown <= 0 and health > 0
-	var edge: String = world._edge_key(cell, target_cell)
-	if crossing_junction < 0 and world.crossing_edges.has(edge):
+	if crossing_junction < 0 and _crossing_target >= 0:
 		if not world.may_cross(cell, target_cell): can_walk = false
-		elif can_walk: crossing_junction = world.crossing_edges[edge]
+		elif can_walk: crossing_junction = _crossing_target
 	var direction := offset.normalized()
 	var desired_speed := walk_speed * (2.6 if flee_time > 0 else 1.0)
-	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP, global_position + Vector3.UP + direction * 0.9, 1 | 2 | 4 | 8, [get_rid()])
-	var obstructed := not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
-	if obstructed: can_walk = false
+	_sensor_tick -= delta
+	if can_walk and _sensor_tick <= 0.0:
+		_sensor_tick = 1.0 / 12.0
+		var stopping_distance := desired_speed * desired_speed / 12.0 + desired_speed / 12.0 + 0.35
+		_obstacle_ray.from = global_position + Vector3.UP
+		_obstacle_ray.to = _obstacle_ray.from + direction * maxf(0.9, stopping_distance)
+		_obstructed = not get_world_3d().direct_space_state.intersect_ray(_obstacle_ray).is_empty()
+	if _obstructed: can_walk = false
 	if not can_walk: desired_speed = 0
 	velocity.x = move_toward(velocity.x, direction.x * desired_speed, delta * 6)
 	velocity.z = move_toward(velocity.z, direction.z * desired_speed, delta * 6)
@@ -100,7 +113,7 @@ func _physics_process(delta: float) -> void:
 	if actual_speed > 0.1: rotation.y = lerp_angle(rotation.y, atan2(direction.x, direction.z), minf(delta * 6, 1))
 	_update_animation(delta, actual_speed)
 	model.rotation.z = lerpf(model.rotation.z, 1.4 if knockdown > 0 or health <= 0 else 0.0, minf(delta * 6, 1))
-	if actual_speed < 0.1 and (can_walk or obstructed) and health > 0 and knockdown <= 0:
+	if actual_speed < 0.1 and (can_walk or _obstructed) and health > 0 and knockdown <= 0:
 		blocked_time += delta
 		if blocked_time > 3 and crossing_junction < 0:
 			previous_cell = target_cell
@@ -113,11 +126,21 @@ func _update_animation(delta: float, actual_speed: float) -> void:
 	animation_elapsed += delta
 	animation_lod_timer -= delta
 	if animation_lod_timer <= 0.0:
-		animation_lod_timer = 0.5
+		animation_lod_timer = 0.25
 		var distance_squared := INF
 		if is_instance_valid(world.subject):
 			distance_squared = global_position.distance_squared_to(world.subject.global_position)
+		var previous_interval := animation_interval
 		animation_interval = 1.0 / 60.0 if distance_squared < 400.0 else (1.0 / 30.0 if distance_squared < 3025.0 else 1.0 / 15.0)
+		var camera := get_viewport().get_camera_3d()
+		if distance_squared >= 400.0 and camera != null and not camera.is_position_in_frustum(global_position + Vector3.UP):
+			animation_interval = 0.1 if distance_squared < 1600.0 else 0.2
+		if previous_interval > 0.09 and animation_interval < 0.09:
+			motion._clear_foot_locks()
+	# The idle pose has no advancing gait; avoid resolving all four IK chains again.
+	if actual_speed < 0.01 and float(motion.get("blend")) <= 0.001:
+		animation_elapsed = 0.0
+		return
 	if animation_elapsed + 0.000001 < animation_interval: return
 	# Pass all elapsed time so gait speed and blend timing stay the same at every LOD.
 	motion.update(animation_elapsed, actual_speed, flee_time > 0)

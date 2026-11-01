@@ -4,6 +4,9 @@ var world: Node3D
 var junction_index := 0
 var lamps: Array[Array] = []
 var pedestrian_labels: Array[Label3D] = []
+var _last_second := -1
+var _last_light_states := PackedInt32Array([-1, -1, -1, -1])
+var _last_walk_state := -1
 
 
 func _ready() -> void:
@@ -44,13 +47,21 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# Every phase boundary is an integer second. Materials change only at a boundary.
+	var second := floori(fmod(world.elapsed, 58.0))
+	if second == _last_second: return
+	_last_second = second
 	for direction in 4:
 		var active: int = world.light_state(junction_index, direction)
+		if active == _last_light_states[direction]: continue
+		_last_light_states[direction] = active
 		for i in 3:
 			var material: StandardMaterial3D = lamps[direction][i]
 			material.emission_energy_multiplier = 3.5 if active == i else 0
 			material.albedo_color = material.emission if active == i else material.emission.darkened(0.88)
-	var walk := fmod(world.elapsed, 58.0) >= 30 and fmod(world.elapsed, 58.0) < 36
+	var walk := second >= 30 and second < 36
+	if int(walk) == _last_walk_state: return
+	_last_walk_state = int(walk)
 	for sign in pedestrian_labels:
 		sign.text = "WALK" if walk else "WAIT"
 		sign.modulate = Color("91efc1") if walk else Color("e78b73")

@@ -65,11 +65,13 @@ func configure(scene: Node3D, back: Callable) -> void:
 
 func _process(delta: float) -> void:
 	if not _configured: return
+	# Menu transactions explicitly refresh their own state. A frozen city does
+	# not need new dictionaries, label shaping and radar redraws every 150 ms.
+	if get_tree().paused: return
 	_ui_tick -= delta
 	if _ui_tick <= 0:
 		_ui_tick = 0.15
 		_refresh_ui()
-	if get_tree().paused: return
 	_recovery_cooldown = maxf(0.0, _recovery_cooldown - delta)
 	if _recovery_cooldown <= 0:
 		if not _pending_recovery.is_empty():
@@ -85,7 +87,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _configured: return
+	if not _configured or CityPerformance.loading: return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_TAB or event.is_action_pressed("back"):
 			get_viewport().set_input_as_handled()
@@ -102,7 +104,7 @@ func _notification(what: int) -> void:
 
 
 func open_menu() -> void:
-	if not _configured or menu.visible: return
+	if not _configured or menu.visible or CityPerformance.loading: return
 	town.character.aiming = false
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

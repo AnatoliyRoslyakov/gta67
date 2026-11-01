@@ -24,6 +24,7 @@ var circuit_button: Button
 var cancel_button: Button
 var service_button: Button
 var content: VBoxContainer
+var quality_choice: OptionButton
 
 
 func _ready() -> void:
@@ -109,6 +110,20 @@ func _ready() -> void:
 	pause_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pause_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	footer.add_child(pause_hint)
+	var graphics := HBoxContainer.new()
+	graphics.add_theme_constant_override("separation", 18)
+	content.add_child(graphics)
+	var graphics_label := _label("Графика и расход энергии", 14, MUTED)
+	graphics_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	graphics_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	graphics.add_child(graphics_label)
+	quality_choice = OptionButton.new()
+	for label in CityPerformance.LABELS: quality_choice.add_item(label)
+	quality_choice.select(CityPerformance.quality)
+	quality_choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quality_choice.custom_minimum_size.y = 36
+	quality_choice.item_selected.connect(func(index: int): CityPerformance.set_quality(index))
+	graphics.add_child(quality_choice)
 	hide()
 
 
