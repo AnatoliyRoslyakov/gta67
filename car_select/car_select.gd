@@ -20,7 +20,7 @@ const VEHICLES := [
 @onready var button_sunset: CheckBox = %Sunset
 @onready var button_night: CheckBox = %Night
 
-@onready var button_sdfgi: CheckBox = $%SDFGI
+@onready var button_reflections: CheckBox = %Reflections
 @onready var button_mute: TextureButton = %Mute
 @onready var slider_volume: HSlider = %Volume
 
@@ -43,8 +43,9 @@ func _ready() -> void:
 	# Initialize audio slider.
 	slider_volume.value = AudioServer.get_bus_volume_linear(audio_master)
 
-	# Hide SDFGI button if this is using a renderer that doesn't support it
-	button_sdfgi.visible = RenderingServer.get_current_rendering_method() == "forward_plus"
+	button_reflections.visible = RenderingServer.get_current_rendering_method() == "forward_plus"
+	if "--drive" in OS.get_cmdline_user_args():
+		_load_vehicle.call_deferred(VEHICLES[0])
 
 
 func _process(_delta: float) -> void:
@@ -79,7 +80,7 @@ func _load_vehicle(vehicle: Array) -> void:
 	elif button_night.button_pressed:
 		town.mood = town.Mood.NIGHT
 
-	town.setup(car, _on_back_pressed, button_sdfgi.button_pressed)
+	town.setup(car, _on_back_pressed, button_reflections.button_pressed)
 
 	get_parent().add_child(town)
 	hide()
@@ -89,6 +90,7 @@ func _on_back_pressed() -> void:
 	if is_instance_valid(town):
 		# Currently in the town, go back to main menu.
 		town.queue_free()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		loading_screen.visible = false
 		show()
 		# Automatically focus the first item for gamepad accessibility.

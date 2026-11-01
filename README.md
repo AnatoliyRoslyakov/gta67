@@ -1,32 +1,32 @@
-# GTA67 — v1.0.0
+# GTA67 — 2.0.0
 
-Godot 4.7 project: POLYGON City with vehicle physics, cameras, audio and HUD from Truck Town.
+Godot 4.7 city sandbox based on POLYGON City and the Truck Town vehicle controller.
 
-Open `project.godot` and press F5 to launch the vehicle selector. Eight POLYGON vehicles are available. The city traffic is static.
+Open `project.godot` and press F5 to launch the vehicle selector. Eight vehicles have individually fitted wheels, suspension and cabin cameras. Leave the car to walk, run, jump and use a pistol in first or third person.
+
+The city has 40 moving cars, 64 pedestrians, parked cars, seven signal-controlled junctions and 24 crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. This is a simplified game simulation with fixed phases, without lane changes or police pursuits. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
+
+A full day lasts 30 minutes: warm sunlight, long shadows, distant haze, street lamps, neon and nighttime reflections change with the clock. Nearby lights and pedestrian animation updates use distance budgets. The HUD shows the local street map, cash, wanted stars, clock, speed and ammunition. Cash and wanted stars are sandbox indicators; there is no mission economy yet.
 
 Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
 
-Each version uses its own branch: `v1.0.0`, `v1.0.1`, and so on.
+This version is on branch `2.0.0`. Purchased models, textures and map files are never included in commits.
 
 ## Controls
 
-- <kbd>Up Arrow</kbd>, <kbd>W</kbd>, <kbd>Gamepad Right Trigger</kbd>: Accelerate
-- <kbd>Space</kbd>: Brake
-- <kbd>R</kbd>: Reset vehicle
-- <kbd>Down Arrow</kbd>, <kbd>S</kbd>, <kbd>Gamepad Left Trigger</kbd>, <kbd>Gamepad B/Circle</kbd>, <kbd>Gamepad X/Square</kbd>: Brake/reverse
-- <kbd>Left Arrow</kbd>, <kbd>Gamepad Left Stick</kbd>, <kbd>Gamepad D-Pad Left</kbd>: Steer left
-- <kbd>Right Arrow</kbd>, <kbd>Gamepad Left Stick</kbd>, <kbd>Gamepad D-Pad Right</kbd>: Steer right
-- <kbd>U</kbd>, <kbd>Gamepad Select</kbd>, left-click speedometer: Change speedometer unit (m/s, km/h, mph)
-- <kbd>C</kbd>, <kbd>Gamepad Y/Triangle</kbd>: Change camera (exterior, interior, top-down)
-- <kbd>M</kbd>, <kbd>Gamepad D-Pad Down</kbd>: Change mood (sunrise, day, sunset, night)
-- <kbd>Shift</kbd>, <kbd>Gamepad A/Cross</kbd>: Use boost
-- <kbd>H</kbd>, <kbd>Enter</kbd>, <kbd>Gamepad Left Stick Press</kbd>: Use horn
-- <kbd>L</kbd>, <kbd>Gamepad Right Stick Press</kbd>: Toggle headlights (automatically occurs on mood change)
-- <kbd>Escape</kbd>, <kbd>Gamepad D-Pad Up</kbd>: Go back to menu (press again to exit)
+- <kbd>WASD</kbd>: Drive or move on foot.
+- <kbd>Shift</kbd>: Vehicle boost / run.
+- <kbd>Space</kbd>: Brake / jump.
+- <kbd>E</kbd>: Leave a stopped vehicle or enter your car when nearby.
+- <kbd>C</kbd>: Exterior / cabin / top-down camera in a car; third / first person on foot.
+- Mouse: Look on foot; hold right mouse to look around in a car.
+- <kbd>Q</kbd>: Draw or holster the pistol. Right mouse aims; left mouse fires.
+- <kbd>R</kbd>: Reload on foot / reset while driving. <kbd>F5</kbd> always restores the car.
+- <kbd>M</kbd>: Advance to sunrise, day, sunset or night.
+- <kbd>H</kbd>: Horn. <kbd>L</kbd>: Headlights (also switch automatically at dusk).
+- <kbd>F1</kbd>: Controls. <kbd>Escape</kbd>: Vehicle selector; press again to exit.
 
-On mobile platforms, the vehicle automatically accelerates. Touch the left and
-right edges of the screen to steer. Touch the middle of the screen to
-brake/reverse (this also temporarily stops acceleration).
+Desktop keyboard and mouse are the primary controls. The inherited controller support covers driving; the new on-foot actions require keyboard and mouse.
 
 Language: GDScript
 
@@ -36,14 +36,7 @@ Check out this demo on the Asset Store: https://store.godotengine.org/asset/godo
 
 ## How does it work?
 
-The base vehicle uses a
-[`VehicleBody3D`](https://docs.godotengine.org/en/latest/classes/class_vehiclebody3d.html)
-node. The trailer truck is tied together using a
-[`ConeJointTwist3D`](https://docs.godotengine.org/en/latest/classes/class_conetwistjoint3d.html)
-node, and the tow truck is tried together using a chain made of
-[`RigidBody3D`](https://docs.godotengine.org/en/latest/classes/class_rigidbody3d.html)
-nodes which are pinned together using
-[`PinJoint3D`](https://docs.godotengine.org/en/latest/classes/class_pinjoint3d.html) nodes.
+The player car uses `VehicleBody3D` with model-specific wheel centers and suspension. Citizens and traffic use `CharacterBody3D`; their routes are derived from the imported map at runtime. Character poses are procedural because the supplied character clips contain only static keys. All material, light and rig changes are applied at runtime without editing the purchased source files.
 
 ## Credits
 

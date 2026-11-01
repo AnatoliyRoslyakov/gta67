@@ -3,12 +3,13 @@ extends Control
 const MAP_SCALE := 1.15
 const CENTER := Vector2(100, 100)
 const MAP_RECT := Rect2(0, 0, 200, 200)
-var player_body: VehicleBody3D
+var player_body: Node3D
 var footprints: Array[Dictionary] = []
 
 
-func configure(city: Node3D, vehicle: VehicleBody3D) -> void:
+func configure(city: Node3D, vehicle: Node3D) -> void:
 	player_body = vehicle
+	footprints.clear()
 	var layers: Array[Array] = [[], [], []]
 	var seen: Dictionary = {}
 	for node in city.find_children("*", "MeshInstance3D", true, false):
@@ -41,6 +42,8 @@ func _draw() -> void:
 			var rect := Rect2((world_rect.position - origin) * MAP_SCALE + CENTER, world_rect.size * MAP_SCALE)
 			if rect.intersects(MAP_RECT): draw_rect(rect.intersection(MAP_RECT), colors[footprint.layer])
 		var forward := player_body.global_basis.z
+		if player_body is CharacterBody3D:
+			forward = Vector3(-sin(player_body.yaw), 0, -cos(player_body.yaw))
 		var heading := atan2(forward.x, -forward.z)
 		var arrow := PackedVector2Array([Vector2(0, -9), Vector2(-6, 7), Vector2(0, 4), Vector2(6, 7)])
 		for i in arrow.size(): arrow[i] = arrow[i].rotated(heading) + CENTER

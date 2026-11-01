@@ -1,131 +1,117 @@
 extends VehicleBody3D
 
-const STEER_SPEED = 1.5
-const STEER_LIMIT = 0.4
-const BRAKE_STRENGTH = 35.0
-
-@export var engine_force_value := 40.0
-
+@export var engine_force_value := 1800.0
+@export var max_forward_speed := 44.0
+@export var max_reverse_speed := 9.0
+@export var controllable := true
 var turbometer: Range
 var turbo_animator: AnimationPlayer
-
-var previous_speed := linear_velocity.length()
-var turbo_active := false
 var headlights_active := false
-var _steer_target := 0.0
-var is_compatibility := RenderingServer.get_current_rendering_method() == "gl_compatibility"
-
-@onready var desired_engine_pitch: float = $EngineSound.pitch_scale
+var turbo_active := false
+var previous_speed := 0.0
+var desired_engine_pitch := 0.6
+var is_compatibility := false
+var impact_cooldown := 0.0
 
 
 func _ready() -> void:
-	assert(turbometer)
-	assert(turbo_animator)
+	is_compatibility = RenderingServer.get_current_rendering_method() == "gl_compatibility"
+	set_controlled(controllable)
+
+
+func set_controlled(value: bool) -> void:
+	controllable = value
+	engine_force = 0.0
+	brake = 0.0 if value else 35.0 * mass / 1400.0
+	constant_force = Vector3.ZERO
+	turbo_active = false
+	if not is_inside_tree(): return
+	var camera := get_node_or_null("CameraBase/Camera3D")
+	if camera:
+		camera.set_process_input(value)
+		camera.set_physics_process(value)
+		if value:
+			camera.update_camera()
+			camera.make_current()
+		elif camera.is_current():
+			camera.clear_current(false)
+	if value:
+		$EngineSound.play()
+		$AudioListener3D.make_current()
+	else:
+		$EngineSound.stop()
+		$AudioListener3D.clear_current()
+	$CPUParticles3D.emitting = value
 
 
 func _physics_process(delta: float) -> void:
-	_steer_target = Input.get_axis(&"turn_right", &"turn_left")
-	_steer_target *= STEER_LIMIT
-
-	# Engine sound simulation (not realistic, as this car script has no notion of gear or engine RPM).
-	desired_engine_pitch = 0.25 + linear_velocity.length() / 22.0
-	# Change pitch smoothly to avoid abrupt change on collision.
-	$EngineSound.pitch_scale = lerpf($EngineSound.pitch_scale, desired_engine_pitch, 0.2)
-
-	if absf(linear_velocity.length() - previous_speed) > 1.0:
-		# Sudden velocity change, likely due to a collision. Play an impact sound to give audible feedback,
-		# and vibrate for haptic feedback.
+	impact_cooldown = maxf(impact_cooldown - delta, 0.0)
+	if not controllable:
+		engine_force = 0
+		brake = 35.0 * mass / 1400.0
+		constant_force = Vector3.ZERO
+		return
+	var speed := linear_velocity.length()
+	var forward_speed := linear_velocity.dot(global_basis.z)
+	var steer_limit := lerpf(0.52, 0.15, clampf(speed / 32.0, 0, 1))
+	var steer_target := Input.get_axis("turn_right", "turn_left") * steer_limit
+	steering = move_toward(steering, steer_target, delta * (1.8 if absf(steer_target) > 0.01 else 2.7))
+	var throttle := Input.get_action_strength("accelerate")
+	var reverse := Input.get_action_strength("reverse")
+	var hard_brake := Input.is_physical_key_pressed(KEY_SPACE)
+	brake = 0
+	engine_force = 0
+	var brake_force := 32.0 * mass / 1400.0
+	if hard_brake:
+		brake = brake_force * 1.25
+	elif reverse > 0:
+		if forward_speed > 0.6:
+			brake = brake_force * reverse
+		elif forward_speed > -max_reverse_speed:
+			engine_force = -engine_force_value * 0.6 * reverse
+	elif throttle > 0:
+		if forward_speed < -0.6:
+			brake = brake_force * throttle
+		else:
+			var power_falloff := 1.0 - smoothstep(max_forward_speed * 0.7, max_forward_speed, forward_speed)
+			engine_force = engine_force_value * throttle * power_falloff
+	elif speed < 0.25:
+		brake = 3.0
+	var boost_pressed := Input.is_action_pressed("boost") and throttle > 0 and not hard_brake
+	var boost_available := is_instance_valid(turbometer) and turbometer.value > 0
+	var new_boost := boost_pressed and boost_available
+	if new_boost != turbo_active and is_instance_valid(turbo_animator):
+		turbo_animator.play("TURBO" if new_boost else "Idle")
+	turbo_active = new_boost
+	if is_instance_valid(turbometer):
+		turbometer.value += -delta * 2.0 if turbo_active else delta * 0.7
+	if turbo_active: engine_force *= 1.4
+	# Grounded aerodynamic load, capped to prevent suspension bottoming at speed.
+	var grounded := false
+	for child in get_children():
+		if child is VehicleWheel3D and child.is_in_contact(): grounded = true
+	constant_force = -global_basis.y * minf(speed * speed * 2.5, mass * 3.0) if grounded else Vector3.ZERO
+	desired_engine_pitch = 0.55 + minf(speed / 30.0, 1.3) + throttle * 0.15
+	$EngineSound.pitch_scale = lerpf($EngineSound.pitch_scale, desired_engine_pitch, 1 - exp(-delta * 5))
+	if previous_speed - speed > 2.5 and impact_cooldown <= 0:
 		$ImpactSound.play()
-		Input.vibrate_handheld(100)
-		for joypad in Input.get_connected_joypads():
-			Input.start_joy_vibration(joypad, 0.0, 0.5, 0.1)
-
-	var turbo_pressed := Input.is_action_pressed(&"boost")
-	var new_turbo_active := turbo_pressed and turbometer.value > 0
-	if new_turbo_active != turbo_active:
-		turbo_animator.play(&"TURBO" if new_turbo_active else &"Idle")
-
-	turbo_active = new_turbo_active
-	if turbo_active:
-		turbometer.value -= delta * 3.0
-	elif not turbo_pressed:
-		turbometer.value += delta
-
-	if turbo_active:
-		constant_force = global_transform.basis.z * mass * 7.0
-	else:
-		constant_force = Vector3()
-
-	# Automatically accelerate when using touch controls (reversing overrides acceleration).
-	if DisplayServer.is_touchscreen_available() or Input.is_action_pressed(&"accelerate"):
-		# Increase engine force at low speeds to make the initial acceleration faster.
-		var speed := linear_velocity.length()
-		if speed < 5.0 and not is_zero_approx(speed):
-			engine_force = clampf(engine_force_value * 5.0 / speed, 0.0, engine_force_value * 2.5)
-		else:
-			engine_force = engine_force_value
-
-		if not DisplayServer.is_touchscreen_available():
-			# Apply analog throttle factor for more subtle acceleration if not fully holding down the trigger.
-			engine_force *= Input.get_action_strength(&"accelerate")
-	else:
-		engine_force = 0.0
-
-	brake = 0.0
-	if Input.is_physical_key_pressed(KEY_SPACE):
-		engine_force = 0.0
-		brake = BRAKE_STRENGTH
-	elif Input.is_action_pressed(&"reverse"):
-		# Increase engine force at low speeds to make the initial reversing faster.
-		var speed := linear_velocity.length()
-		if speed < 5.0 and not is_zero_approx(speed):
-			engine_force = -clampf(engine_force_value * 5.0 / speed, 0.0, engine_force_value * 2.5)
-		else:
-			engine_force = -engine_force_value
-
-		# Apply analog brake factor for more subtle braking if not fully holding down the trigger.
-		engine_force *= Input.get_action_strength(&"reverse")
-		if linear_velocity.dot(global_basis.z) > 1.0:
-			engine_force = 0.0
-			brake = BRAKE_STRENGTH * Input.get_action_strength(&"reverse")
-
-	steering = move_toward(steering, _steer_target, STEER_SPEED * delta)
-
-	previous_speed = linear_velocity.length()
+		impact_cooldown = 0.3
+		for joypad in Input.get_connected_joypads(): Input.start_joy_vibration(joypad, 0, 0.35, 0.12)
+	previous_speed = speed
 
 
-func _input(p_input_event: InputEvent) -> void:
-	if p_input_event.is_action_pressed(&"toggle_headlights"):
-		toggle_headlights()
-
-	if p_input_event.is_action_pressed(&"honk"):
-		$HonkSound.play()
+func _input(event: InputEvent) -> void:
+	if not controllable: return
+	if event.is_action_pressed("toggle_headlights"): toggle_headlights()
+	if event.is_action_pressed("honk"): $HonkSound.play()
 
 
 func toggle_headlights() -> void:
-	for node: Light3D in get_tree().get_nodes_in_group(&"headlight"):
-		# Consider headlights as being inactive up to this point if their energy was previously 0.
-		headlights_active = is_zero_approx(node.light_energy)
-		var t := get_tree().create_tween()
+	set_headlights(not headlights_active)
 
-		if headlights_active:
-			node.visible = true
 
-		var target_energy := 2.0 if headlights_active else 0.0
-		if is_compatibility:
-			# Decrease light brightness to compensate for sRGB blending in Compatibility
-			# (since headlights cast shadows).
-			target_energy *= 0.5
-		t.tween_property(
-				node,
-				^"light_energy",
-				target_energy,
-				0.2
-			).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-		# Hide light node at the end to avoid performance impact when headlights are off
-		# (Godot still renders lights with `light_energy == 0.0` otherwise).
-		if not headlights_active:
-			t.finished.connect(func() -> void:
-				node.visible = false
-			)
+func set_headlights(value: bool) -> void:
+	headlights_active = value
+	for node: Light3D in [$HeadlightL, $HeadlightR]:
+		node.visible = value
+		node.light_energy = (1.5 if is_compatibility else 3.0) if value else 0.0

@@ -66,7 +66,7 @@ layout_mode = 0
 anchor_top = 0.25
 anchor_right = 1.0
 anchor_bottom = 0.25
-text = "v1.0.0   ·   Truck Town   ·   Choose your vehicle"
+text = "v2.0.0   ·   Truck Town   ·   Choose your vehicle"
 horizontal_alignment = 1
 
 [node name="MoodPanel" type="PanelContainer" parent="." unique_id=987428814]
@@ -157,10 +157,11 @@ custom_minimum_size = Vector2(70, 0)
 layout_mode = 2
 text = "Options"
 
-[node name="SDFGI" type="CheckBox" parent="OptionsPanel/MarginContainer/HBoxContainer" unique_id=391285140]
+[node name="Reflections" type="CheckBox" parent="OptionsPanel/MarginContainer/HBoxContainer" unique_id=391285140]
 unique_name_in_owner = true
 layout_mode = 2
-text = "SDFGI"
+button_pressed = true
+text = "Night reflections"
 
 [node name="Audio" type="HBoxContainer" parent="OptionsPanel/MarginContainer/HBoxContainer" unique_id=1143737421]
 layout_mode = 2

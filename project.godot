@@ -11,9 +11,9 @@ config_version=5
 [application]
 
 config/name="GTA67"
-config/version="1.0.0"
-config/description="POLYGON City with Truck Town vehicle physics."
-config/tags=PackedStringArray("3d", "demo", "official", "physics", "vehicle")
+config/version="2.0.0"
+config/description="An open city with driving, walking, traffic and a dynamic day-night cycle."
+config/tags=PackedStringArray("3d", "city", "physics", "vehicle")
 run/main_scene="res://car_select/car_select.tscn"
 config/features=PackedStringArray("4.7")
 config/icon="res://icon.webp"
