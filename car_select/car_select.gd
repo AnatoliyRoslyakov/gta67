@@ -32,7 +32,7 @@ var _loading := false
 var _loaded_scenes: Dictionary = {}
 
 func _ready() -> void:
-	$Subtitle.text = "v%s   ·   Truck Town   ·   Choose your vehicle" % ProjectSettings.get_setting("application/config/version", "2.0.1")
+	$Subtitle.text = "v%s   ·   Truck Town   ·   Choose your vehicle" % ProjectSettings.get_setting("application/config/version", "2.0.0")
 	var loading_layer := CanvasLayer.new()
 	loading_layer.layer = 100
 	add_child(loading_layer)

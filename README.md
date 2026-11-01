@@ -22,7 +22,7 @@ On the development Mac (M1 Pro, 1280×720, stationary day/night views, equal 60 
 
 Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
 
-This version is on branch `2.0.1`. Purchased models, textures and map files are never included in commits.
+This version is on branch `2.0.0`. Purchased models, textures and map files are never included in commits.
 
 ## Controls
 
