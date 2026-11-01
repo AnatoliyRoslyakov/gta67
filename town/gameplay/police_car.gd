@@ -69,20 +69,25 @@ func set_route(points: Array[Vector3i]) -> void:
 		state = route.pop_front()
 	next_state = route[0] if not route.is_empty() else state
 	_pursuit_sensor_tick = 0.0
+	_turn_points.clear()
 
 
 func _physics_process(delta: float) -> void:
 	age += delta
 	var target: Vector3 = world.lane_position(next_state)
 	var offset := Vector3(target.x - global_position.x, 0, target.z - global_position.z)
-	while not route.is_empty() and offset.length() < 0.55:
+	var following: Vector3i = route[1] if route.size() > 1 else next_state
+	while not route.is_empty() and _reached_lane(following):
 		state = route.pop_front()
 		next_state = route[0] if not route.is_empty() else state
 		target = world.lane_position(next_state)
 		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
+		following = route[1] if route.size() > 1 else next_state
+	target = _driving_target(following)
+	offset = target - global_position
 	var direction := offset.normalized()
 	var desired := cruise_speed if not route.is_empty() and pursuit_enabled else 0.0
-	if next_state.z != state.z: desired = minf(desired, 4.5)
+	if _is_turn(following): desired = minf(desired, 3.5)
 	# An emergency response can cross a red light, but never drives through traffic or people.
 	_pursuit_sensor_tick -= delta
 	if _pursuit_sensor_tick <= 0.0:
@@ -90,19 +95,9 @@ func _physics_process(delta: float) -> void:
 		_pursuit_obstacle_speed = _obstacle_speed(direction, maxf(9.0, speed * 2.1))
 	desired = minf(desired, _pursuit_obstacle_speed)
 	if damage > 70: desired = 0
-	var braking := desired < speed - 0.3
-	speed = move_toward(speed, desired, delta * (7.5 if braking else 3.0))
-	if direction.length_squared() > 0.01:
-		rotation.y = lerp_angle(rotation.y, atan2(direction.x, direction.z), minf(delta * 6, 1))
-	velocity.x = direction.x * speed
-	velocity.z = direction.z * speed
-	if not is_on_floor(): velocity.y -= 20 * delta
-	else: velocity.y = 0
-	move_and_slide()
-	speed = Vector2(velocity.x, velocity.z).length()
+	var braking := _drive_toward(target, desired, delta)
 	blocked_time = blocked_time + delta if speed < 0.2 and not route.is_empty() else 0.0
-	wheel_distance += velocity.dot(global_basis.z) * delta
-	var steering := clampf(angle_difference(rotation.y, atan2(direction.x, direction.z)), -0.5, 0.5)
+	var steering := steering_angle
 	for wheel in wheel_visuals:
 		wheel.pivot.basis = Basis(Vector3.UP, steering if wheel.front else 0.0) * Basis(Vector3.RIGHT, fmod(wheel_distance / wheel.radius, TAU))
 	light_tick -= delta

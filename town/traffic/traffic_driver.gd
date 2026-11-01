@@ -8,7 +8,15 @@ var world: Node3D
 var state := Vector3i.ZERO
 var next_state := Vector3i.ZERO
 var model_scene: PackedScene
+var paint_tint := Color.WHITE
 var cruise_speed := 8.5
+var following_state := Vector3i.ZERO
+var steering_angle := 0.0
+var wheelbase := 2.7
+var acceleration := 2.0
+var following_time := 1.6
+var _turn_points := PackedVector3Array()
+var _turn_key := Vector3i(2147483647, 0, 0)
 var speed := 0.0
 var model: Node3D
 var wheel_visuals: Array[Dictionary] = []
@@ -23,6 +31,7 @@ var wheel_distance := 0.0
 var _traffic_sensor_tick := 0.0
 var _traffic_obstacle_speed := INF
 var _traffic_ray: PhysicsRayQueryParameters3D
+var _side_rays: Array[PhysicsRayQueryParameters3D] = []
 var _traffic_visual_elapsed := 0.0
 var _traffic_visual_interval := 1.0 / 30.0
 var _traffic_brake_energy := -1.0
@@ -35,6 +44,8 @@ func _ready() -> void:
 	collision_mask = 1 | 2 | 4 | 8
 	add_to_group("traffic")
 	_traffic_ray = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()])
+	for side in 2:
+		_side_rays.append(PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()]))
 	_traffic_sensor_tick = float(get_instance_id() % 6) / 120.0
 	_traffic_visual_elapsed = float(get_instance_id() % 4) / 120.0
 	model = model_scene.instantiate()
@@ -42,7 +53,11 @@ func _ready() -> void:
 	add_child(model)
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(1.75, 1.05, 4.3)
+	var model_bounds: AABB = model.transform * (model as MeshInstance3D).get_aabb()
+	shape.size = Vector3(model_bounds.size.x * 0.87, model_bounds.size.y * 0.75, model_bounds.size.z * 0.94)
+	collider.position.x = model_bounds.get_center().x
+	collider.position.z = model_bounds.get_center().z
+	wheelbase = clampf(model_bounds.size.z * 0.57, 2.0, 3.1)
 	collider.shape = shape
 	add_child(collider)
 	var tire_floor := INF
@@ -66,10 +81,19 @@ func _ready() -> void:
 	# making CharacterBody3D settle the visible wheels beneath the road.
 	collider.position.y = (tire_floor if is_finite(tire_floor) else 0.0) + shape.size.y * 0.5
 	next_state = world.choose_lane(state)
+	following_state = world.choose_lane(next_state)
 	var direction: Vector3 = world.lane_position(next_state) - position
 	rotation.y = atan2(direction.x, direction.z)
 	var body_mesh := model as MeshInstance3D
 	body_bounds = model.transform * body_mesh.get_aabb()
+	for surface in body_mesh.mesh.get_surface_count():
+		var source := body_mesh.get_active_material(surface) as StandardMaterial3D
+		if source != null and paint_tint != Color.WHITE:
+			var finish := source.duplicate() as StandardMaterial3D
+			finish.albedo_color *= paint_tint
+			finish.metallic = 0.15
+			finish.roughness = 0.4
+			body_mesh.set_surface_override_material(surface, finish)
 	body_faces = body_mesh.mesh.get_faces()
 	for index in body_faces.size(): body_faces[index] = model.transform * body_faces[index]
 	var lamp_height := 0.72
@@ -114,17 +138,20 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var target: Vector3 = world.lane_position(next_state)
-	var offset := Vector3(target.x - global_position.x, 0, target.z - global_position.z)
-	if offset.length() < 0.45:
+	if _reached_lane(following_state):
 		state = next_state
-		next_state = world.choose_lane(state)
+		next_state = following_state
+		following_state = world.choose_lane(next_state)
 		_traffic_sensor_tick = 0.0
-		target = world.lane_position(next_state)
-		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
-	var direction := offset.normalized()
+	var target := _driving_target(following_state)
+	var direction := (target - global_position).normalized()
 	var desired := cruise_speed
-	if next_state.z != state.z: desired = minf(desired, 4.0)
+	if following_state == next_state:
+		desired = minf(desired, sqrt(maxf(0, 6.0 * (global_position.distance_to(world.lane_position(next_state)) - 1.0))))
+	if state == next_state: desired = 0.0
+	var turning := _is_turn(following_state)
+	if turning and global_position.distance_to(world.lane_position(next_state)) < 8.0:
+		desired = minf(desired, 3.0)
 	desired = minf(desired, world.approach_speed(self, state, next_state))
 	_traffic_sensor_tick -= delta
 	if _traffic_sensor_tick <= 0.0:
@@ -132,24 +159,12 @@ func _physics_process(delta: float) -> void:
 		_traffic_obstacle_speed = _sense_obstacles(direction, maxf(9, speed * 2.2))
 	desired = minf(desired, _traffic_obstacle_speed)
 	if damage > 70: desired = 0
-	var braking := desired < speed - 0.5
-	speed = move_toward(speed, desired, delta * (6.5 if braking else 2.0))
-	if direction.length() > 0.01:
-		rotation.y = lerp_angle(rotation.y, atan2(direction.x, direction.z), minf(delta * 5, 1))
-	velocity.x = direction.x * speed
-	velocity.z = direction.z * speed
-	if not is_on_floor(): velocity.y -= 20 * delta
-	else: velocity.y = 0
-	move_and_slide()
-	speed = Vector2(velocity.x, velocity.z).length()
-	wheel_distance += velocity.dot(global_basis.z) * delta
+	var braking := _drive_toward(target, desired, delta)
 	_traffic_visual_elapsed += delta
 	if _traffic_visual_elapsed + 0.000001 >= _traffic_visual_interval:
 		_traffic_visual_elapsed = fmod(_traffic_visual_elapsed, _traffic_visual_interval)
-		var wheel_steer := clampf(angle_difference(rotation.y, atan2(direction.x, direction.z)), -0.5, 0.5)
 		for wheel in wheel_visuals:
-			var steering_basis := Basis(Vector3.UP, wheel_steer if wheel.front else 0.0)
-			wheel.pivot.basis = steering_basis * Basis(Vector3.RIGHT, fmod(wheel_distance / wheel.radius, TAU))
+			wheel.pivot.basis = Basis(Vector3.UP, steering_angle if wheel.front else 0.0) * Basis(Vector3.RIGHT, fmod(wheel_distance / wheel.radius, TAU))
 	light_tick -= delta
 	if light_tick <= 0:
 		light_tick += 0.5
@@ -159,13 +174,81 @@ func _physics_process(delta: float) -> void:
 		_traffic_brake_energy = brake_energy
 		for lamp in brake_lights:
 			(lamp.material_override as StandardMaterial3D).emission_energy_multiplier = brake_energy
-	var turn_direction := posmod(next_state.z - state.z, 4)
+	var turn_direction := posmod(following_state.z - next_state.z, 4) if turning else posmod(next_state.z - state.z, 4)
 	var turn_state := turn_direction if (turn_direction == 1 or turn_direction == 3) and fmod(world.elapsed, 0.8) < 0.4 else 0
 	if turn_state != _traffic_turn_state:
 		_traffic_turn_state = turn_state
 		for i in turn_lights.size():
 			var lit := (turn_state == 1 and i == 1) or (turn_state == 3 and i == 0)
 			(turn_lights[i].material_override as StandardMaterial3D).emission_energy_multiplier = 2.0 if lit else 0.0
+
+
+func _is_turn(following: Vector3i) -> bool:
+	var incoming: Vector3 = world.lane_position(next_state) - world.lane_position(state)
+	var outgoing: Vector3 = world.lane_position(following) - world.lane_position(next_state)
+	return incoming.length_squared() > 0.1 and outgoing.length_squared() > 0.1 and incoming.normalized().dot(outgoing.normalized()) < 0.5
+
+
+func _reached_lane(following: Vector3i) -> bool:
+	var corner: Vector3 = world.lane_position(next_state)
+	var offset := global_position - corner
+	offset.y = 0
+	if not _is_turn(following):
+		var incoming: Vector3 = (corner - world.lane_position(state)).normalized()
+		return offset.length() < 0.8 or offset.dot(incoming) > 0.0
+	var outgoing: Vector3 = (world.lane_position(following) - corner).normalized()
+	return offset.dot(outgoing) > 1.5 and global_basis.z.dot(outgoing) > 0.8
+
+
+func _driving_target(following: Vector3i) -> Vector3:
+	var corner: Vector3 = world.lane_position(next_state)
+	if not _is_turn(following): return corner
+	if _turn_key != next_state or _turn_points.is_empty():
+		_turn_key = next_state
+		_turn_points.clear()
+		var incoming: Vector3 = (corner - world.lane_position(state)).normalized()
+		var outgoing: Vector3 = (world.lane_position(following) - corner).normalized()
+		var entry := corner - incoming * 2.2
+		var exit := corner + outgoing * 2.2
+		for i in 17:
+			var t := float(i) / 16.0
+			_turn_points.append(entry.lerp(corner, t).lerp(corner.lerp(exit, t), t))
+	var nearest := 0
+	var distance := INF
+	for i in _turn_points.size():
+		var candidate := global_position.distance_squared_to(_turn_points[i])
+		if candidate < distance:
+			distance = candidate
+			nearest = i
+	# Aim along the fillet, rather than at the square grid corner.
+	if nearest == 0 and distance > 1.8 * 1.8: return _turn_points[0]
+	if nearest >= 14:
+		var outgoing: Vector3 = (world.lane_position(following) - corner).normalized()
+		return _turn_points[-1] + outgoing * 2.0
+	return _turn_points[mini(nearest + 5, _turn_points.size() - 1)]
+
+
+func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
+	var offset := target - global_position
+	offset.y = 0
+	var error := angle_difference(rotation.y, atan2(offset.x, offset.z))
+	var requested := clampf(atan2(2.0 * wheelbase * sin(error), maxf(offset.length(), 1.0)), -1.2, 1.2)
+	steering_angle = move_toward(steering_angle, requested, delta * 1.8)
+	# Bicycle steering: the velocity and body share a heading, including in turns.
+	var curvature := absf(tan(steering_angle) / wheelbase)
+	desired = minf(desired, sqrt(2.8 / maxf(curvature, 0.01)))
+	if absf(error) > PI * 0.55: desired = minf(desired, 1.2)
+	var braking := desired < speed - 0.3
+	speed = move_toward(speed, desired, delta * (6.5 if braking else acceleration))
+	var yaw_rate := speed / wheelbase * tan(steering_angle)
+	rotation.y += yaw_rate * delta
+	velocity.x = global_basis.z.x * speed
+	velocity.z = global_basis.z.z * speed
+	velocity.y = velocity.y - 20.0 * delta if not is_on_floor() else 0.0
+	move_and_slide()
+	speed = maxf(0.0, velocity.dot(global_basis.z))
+	wheel_distance += speed * delta
+	return braking
 
 
 func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
@@ -179,13 +262,15 @@ func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 		var ahead := relative.dot(direction)
 		var lateral := absf(relative.x * direction.z - relative.z * direction.x)
 		if ahead > 0 and ahead < lookahead and lateral < 2.1:
-			limit = minf(limit, maxf(0, (ahead - 6.0 - reaction_margin) / 1.7))
-	_traffic_ray.from = origin + Vector3.UP
-	_traffic_ray.to = _traffic_ray.from + direction * lookahead
-	var hit := get_world_3d().direct_space_state.intersect_ray(_traffic_ray)
-	if not hit.is_empty():
-		var gap: float = origin.distance_to(hit.position)
-		limit = minf(limit, maxf(0, (gap - 3.5 - reaction_margin) / 1.5))
+			limit = minf(limit, maxf(0, (ahead - body_bounds.size.z * 0.5 - other.body_bounds.size.z * 0.5 - 1.8 - reaction_margin) / following_time))
+	for i in 3:
+		var ray := _traffic_ray if i == 1 else _side_rays[0 if i == 0 else 1]
+		ray.from = origin + Vector3.UP + global_basis.x * ((i - 1) * body_bounds.size.x * 0.35)
+		ray.to = ray.from + direction * lookahead
+		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+		if not hit.is_empty():
+			var gap: float = ray.from.distance_to(hit.position)
+			limit = minf(limit, maxf(0, (gap - body_bounds.size.z * 0.5 - 1.3 - reaction_margin) / 1.5))
 	return limit
 
 

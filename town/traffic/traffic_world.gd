@@ -62,7 +62,7 @@ func _ready() -> void:
 func _initialize() -> void:
 	if _starting: return
 	_starting = true
-	rng.seed = 672000
+	rng.randomize()
 	await get_tree().physics_frame
 	_extract_surfaces()
 	_build_lanes()
@@ -193,7 +193,7 @@ func _build_lanes() -> void:
 				if _lane_allowed(next, outgoing): options.append(Vector3i(next.x, next.y, outgoing))
 			if not options.is_empty(): lanes[state] = options
 	# Remove branches ending on missing lane states; actors never route to a nonexistent node.
-	for pass_index in 12:
+	while true:
 		var removed := false
 		for state in lanes.keys():
 			var options: Array[Vector3i] = []
@@ -295,6 +295,7 @@ func _spawn_population() -> void:
 	# Keep the loading overlay responsive while models, colliders and rigs enter the tree.
 	var car_batch := 0
 	var pedestrian_batch := 0
+	var model_bag: Array = []
 	var candidates: Array = lanes.keys()
 	candidates.shuffle()
 	for state in candidates:
@@ -309,8 +310,16 @@ func _spawn_population() -> void:
 		var actor := Driver.new()
 		actor.world = self
 		actor.state = state
-		actor.model_scene = load("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % VEHICLES[drivers.size() % VEHICLES.size()])
-		actor.cruise_speed = rng.randf_range(7.0, 10.5)
+		if model_bag.is_empty():
+			model_bag.assign(VEHICLES)
+			model_bag.shuffle()
+		var vehicle_kind: String = model_bag.pop_back()
+		actor.model_scene = load("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle_kind)
+		if vehicle_kind != "Taxi":
+			actor.paint_tint = Color.from_hsv(rng.randf(), rng.randf_range(0.0, 0.3), rng.randf_range(0.65, 1.0))
+		actor.acceleration = rng.randf_range(1.3, 2.5)
+		actor.following_time = rng.randf_range(1.5, 2.1)
+		actor.cruise_speed = rng.randf_range(6.5, 10.5) * (0.85 if vehicle_kind == "Van" else 1.0)
 		actor.position = p + Vector3.UP * 0.03
 		add_child(actor)
 		drivers.append(actor)
