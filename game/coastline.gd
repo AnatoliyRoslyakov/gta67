@@ -373,37 +373,40 @@ func _build_hud() -> void:
 	add_child(canvas)
 	_hud_panel(canvas, Rect2(20, 16, 280, 78))
 	_hud_panel(canvas, Rect2(1025, 16, 205, 95))
-	_hud_panel(canvas, Rect2(244, 564, 770, 106))
-	_hud_panel(canvas, Rect2(1025, 642, 205, 58))
+	var mission_group := _bottom_group(canvas, 0.5, Vector2(-396, -114), Vector2(770, 106))
+	var speed_group := _bottom_group(canvas, 1.0, Vector2(-255, -66), Vector2(205, 58))
+	var radar_group := _bottom_group(canvas, 0.0, Vector2(28, -222), Vector2(200, 214))
+	_hud_panel(mission_group, Rect2(0, 0, 770, 106))
+	_hud_panel(speed_group, Rect2(0, 0, 205, 58))
 	var title := _label(canvas, "COASTLINE / 67", Vector2(28, 22), 27, Color("f6e4ce"))
 	title.add_theme_constant_override("outline_size", 1)
 	_label(canvas, "v0.0.1   /   SUNSET COUNTY", Vector2(30, 57), 13, Color("dfb7bd"))
 	cash_label = _label(canvas, "$500", Vector2(1040, 24), 28, Color("a4d3b2"))
 	wanted_label = _label(canvas, "☆☆☆", Vector2(1050, 62), 30, Color("e9c5a1"))
-	mission_label = _label(canvas, "", Vector2(252, 605), 22, Color("efb5d2"))
-	notice_label = _label(canvas, "", Vector2(252, 570), 16, Color("fff0d9"))
-	hint_label = _label(canvas, "", Vector2(252, 647), 15, Color("e5e2d7"))
-	speed_label = _label(canvas, "", Vector2(1040, 650), 23, Color("fff0d9"))
+	mission_label = _label(mission_group, "", Vector2(8, 41), 22, Color("efb5d2"))
+	notice_label = _label(mission_group, "", Vector2(8, 6), 16, Color("fff0d9"))
+	hint_label = _label(mission_group, "", Vector2(8, 83), 15, Color("e5e2d7"))
+	speed_label = _label(speed_group, "", Vector2(15, 8), 23, Color("fff0d9"))
 	_label(canvas, "+", Vector2(634, 346), 20, Color(1, 1, 1, 0.65))
 	radar = Radar.new()
-	radar.position = Vector2(28, 460)
+	radar.position = Vector2.ZERO
 	radar.size = Vector2(200, 200)
 	radar.clip_contents = true
-	canvas.add_child(radar)
+	radar_group.add_child(radar)
 	health_bar = ProgressBar.new()
-	health_bar.position = Vector2(28, 666)
+	health_bar.position = Vector2(0, 206)
 	health_bar.size = Vector2(200, 8)
 	health_bar.show_percentage = false
 	_bar_colors(health_bar, Color("85bca1"))
-	canvas.add_child(health_bar)
+	radar_group.add_child(health_bar)
 	turbo_bar = ProgressBar.new()
-	turbo_bar.position = Vector2(1040, 684)
+	turbo_bar.position = Vector2(15, 42)
 	turbo_bar.size = Vector2(180, 6)
 	turbo_bar.max_value = 10
 	turbo_bar.value = 10
 	turbo_bar.show_percentage = false
 	_bar_colors(turbo_bar, Color("e8b0cb"))
-	canvas.add_child(turbo_bar)
+	speed_group.add_child(turbo_bar)
 	turbo_animator = AnimationPlayer.new()
 	var library := AnimationLibrary.new()
 	library.add_animation("Idle", Animation.new())
@@ -425,6 +428,22 @@ func _build_hud() -> void:
 	resume.pressed.connect(_toggle_pause)
 	pause_panel.add_child(resume)
 	pause_panel.hide()
+
+
+func _bottom_group(parent: Node, horizontal_anchor: float, offset: Vector2, dimensions: Vector2) -> Control:
+	var group := Control.new()
+	group.clip_contents = true
+	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(group)
+	group.anchor_left = horizontal_anchor
+	group.anchor_right = horizontal_anchor
+	group.anchor_top = 1.0
+	group.anchor_bottom = 1.0
+	group.offset_left = offset.x
+	group.offset_top = offset.y
+	group.offset_right = offset.x + dimensions.x
+	group.offset_bottom = offset.y + dimensions.y
+	return group
 
 
 func _hud_panel(parent: Node, rect: Rect2) -> void:
