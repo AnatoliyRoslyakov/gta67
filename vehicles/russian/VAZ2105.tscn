@@ -1,163 +1,25 @@
 [gd_scene format=3]
 
-[ext_resource type="ArrayMesh" path="res://vehicles/russian/vaz_body.res" id="1_0yc68"]
-[ext_resource type="Texture2D" path="res://vehicles/russian/textures/vaz2105_albedo_green.png" id="2_8epua"]
+[ext_resource type="ArrayMesh" path="res://vehicles/russian/vaz2105_body.res" id="1_0yc68"]
+[ext_resource type="ArrayMesh" path="res://vehicles/russian/vaz_wheel.res" id="2_8epua"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_yu8ch"]
-albedo_texture = ExtResource("2_8epua")
-roughness = 0.65
-texture_filter = 2
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6nopo"]
-albedo_color = Color(0.09411765, 0.105882354, 0.1254902, 1)
-roughness = 0.95
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_wboh0"]
-material = SubResource("StandardMaterial3D_6nopo")
-top_radius = 0.28977272
-bottom_radius = 0.28977272
-height = 0.22537878
-radial_segments = 12
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c8w3t"]
-albedo_color = Color(0.5921569, 0.61960787, 0.6117647, 1)
-metallic = 0.5
-roughness = 0.6
-
-[sub_resource type="BoxMesh" id="BoxMesh_44fqk"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_xpcfc"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_6tx8m"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_mele5"]
-material = SubResource("StandardMaterial3D_6nopo")
-top_radius = 0.28977272
-bottom_radius = 0.28977272
-height = 0.22537878
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_d7u0j"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_qh4h1"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_60lc7"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_xokw6"]
-material = SubResource("StandardMaterial3D_6nopo")
-top_radius = 0.28977272
-bottom_radius = 0.28977272
-height = 0.22537878
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_wvlyh"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_spwf8"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_a2nl6"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_x66x5"]
-material = SubResource("StandardMaterial3D_6nopo")
-top_radius = 0.28977272
-bottom_radius = 0.28977272
-height = 0.22537878
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_rivv8"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_rjdcj"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[sub_resource type="BoxMesh" id="BoxMesh_ti4wu"]
-material = SubResource("StandardMaterial3D_c8w3t")
-size = Vector3(0.06375, 0.025, 0.3622159)
-
-[node name="VAZ2105" type="MeshInstance3D" unique_id=1894611735]
+[node name="VAZ2105" type="MeshInstance3D" unique_id=1983407914]
 mesh = ExtResource("1_0yc68")
-surface_material_override/0 = SubResource("StandardMaterial3D_yu8ch")
-metadata/headlight_height = 0.72
+metadata/headlight_height = 0.74
+metadata/authored_materials = true
 
-[node name="VAZ2105_Wheel_fl" type="MeshInstance3D" parent="." unique_id=1944816897]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.6922349, 0.28977272, 1.59375)
-mesh = SubResource("CylinderMesh_wboh0")
+[node name="VAZ2105_Wheel_fl" type="MeshInstance3D" parent="." unique_id=1431607557]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6922349, 0.28977272, 1.59375)
+mesh = ExtResource("2_8epua")
 
-[node name="@MeshInstance3D@14" type="MeshInstance3D" parent="VAZ2105_Wheel_fl" unique_id=980168159]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_44fqk")
+[node name="VAZ2105_Wheel_rl" type="MeshInstance3D" parent="." unique_id=2073189760]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6922349, 0.28977272, -1.0785985)
+mesh = ExtResource("2_8epua")
 
-[node name="@MeshInstance3D@15" type="MeshInstance3D" parent="VAZ2105_Wheel_fl" unique_id=1309271907]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_xpcfc")
+[node name="VAZ2105_Wheel_fr" type="MeshInstance3D" parent="." unique_id=1833675884]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6922349, 0.28977272, 1.59375)
+mesh = ExtResource("2_8epua")
 
-[node name="@MeshInstance3D@16" type="MeshInstance3D" parent="VAZ2105_Wheel_fl" unique_id=239744843]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_6tx8m")
-
-[node name="VAZ2105_Wheel_rl" type="MeshInstance3D" parent="." unique_id=1123629408]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.6922349, 0.28977272, -1.0785985)
-mesh = SubResource("CylinderMesh_mele5")
-
-[node name="@MeshInstance3D@17" type="MeshInstance3D" parent="VAZ2105_Wheel_rl" unique_id=2017538431]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_d7u0j")
-
-[node name="@MeshInstance3D@18" type="MeshInstance3D" parent="VAZ2105_Wheel_rl" unique_id=2049464523]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_qh4h1")
-
-[node name="@MeshInstance3D@19" type="MeshInstance3D" parent="VAZ2105_Wheel_rl" unique_id=715566354]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.118689395, 0)
-mesh = SubResource("BoxMesh_60lc7")
-
-[node name="VAZ2105_Wheel_fr" type="MeshInstance3D" parent="." unique_id=2075846693]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.6922349, 0.28977272, 1.59375)
-mesh = SubResource("CylinderMesh_xokw6")
-
-[node name="@MeshInstance3D@20" type="MeshInstance3D" parent="VAZ2105_Wheel_fr" unique_id=378148910]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_wvlyh")
-
-[node name="@MeshInstance3D@21" type="MeshInstance3D" parent="VAZ2105_Wheel_fr" unique_id=1481458048]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_spwf8")
-
-[node name="@MeshInstance3D@22" type="MeshInstance3D" parent="VAZ2105_Wheel_fr" unique_id=1824103209]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_a2nl6")
-
-[node name="VAZ2105_Wheel_rr" type="MeshInstance3D" parent="." unique_id=1321213038]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.6922349, 0.28977272, -1.0785985)
-mesh = SubResource("CylinderMesh_x66x5")
-
-[node name="@MeshInstance3D@23" type="MeshInstance3D" parent="VAZ2105_Wheel_rr" unique_id=1013197908]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_rivv8")
-
-[node name="@MeshInstance3D@24" type="MeshInstance3D" parent="VAZ2105_Wheel_rr" unique_id=500455671]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_rjdcj")
-
-[node name="@MeshInstance3D@25" type="MeshInstance3D" parent="VAZ2105_Wheel_rr" unique_id=409470032]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.118689395, 0)
-mesh = SubResource("BoxMesh_ti4wu")
+[node name="VAZ2105_Wheel_rr" type="MeshInstance3D" parent="." unique_id=211790107]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.6922349, 0.28977272, -1.0785985)
+mesh = ExtResource("2_8epua")

@@ -68,6 +68,8 @@ The player car uses `VehicleBody3D` with model-specific wheel centers and suspen
 
 ## Russian vehicles
 
-Version 2.0.1 adds VAZ-2101, VAZ-2105 and VAZ-2106 liveries (sharing one classic VAZ body), UAZ-469 and the UAZ Bukhanka van to the vehicle selector and civilian traffic. The UAZ choices use four-wheel drive; each choice has its own mass, engine force and speed limit. Models use the author's low-poly pixel-art textures, with replacement rotating wheels, metre scale and runtime cabin details fitted for the existing controller.
+Version 2.0.1 includes VAZ-2101, VAZ-2105, VAZ-2106, UAZ-469 and UAZ Bukhanka in the selector and civilian traffic. The upgraded models have separately authored bodies, model-specific headlights and tail lights, cut-out wheel arches, framed tinted windows, cabins, mirrors, bumpers and detailed rotating wheels. Materials distinguish paint, glass, chrome, rubber and canvas. The UAZ choices use four-wheel drive; existing handling profiles and wheel positions are preserved.
 
-Source: [MadMedicSoft — Soviet vehicles pack](https://opengameart.org/content/pack-of-extremly-low-poly-soviet-vehicles-in-pixel-art-style), CC0 1.0 (2025). The author's corrected Bukhanka UV mesh is used. These freely redistributable assets and their license are included in `vehicles/russian/`; the purchased POLYGON City assets remain local.
+Meshes are baked offline with `tools/build_russian_models.gd`; there is no runtime mesh generation. VAZ variants share their wheel resource. Each complete car uses approximately 6,800–7,900 triangles. The controller preserves these authored materials instead of applying paint clearcoat to every surface.
+
+The first revision used [MadMedicSoft's CC0 Soviet vehicles pack](https://opengameart.org/content/pack-of-extremly-low-poly-soviet-vehicles-in-pixel-art-style). That pixel-art geometry has now been replaced with original geometry fitted to the established vehicle dimensions. Source attribution remains in `vehicles/russian/LICENSE.txt`. Purchased POLYGON City meshes and textures are not used in these new assets and remain local.

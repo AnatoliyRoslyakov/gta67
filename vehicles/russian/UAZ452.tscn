@@ -1,163 +1,25 @@
 [gd_scene format=3]
 
 [ext_resource type="ArrayMesh" path="res://vehicles/russian/uaz452_body.res" id="1_662pw"]
-[ext_resource type="Texture2D" path="res://vehicles/russian/textures/buhanka_albedo.png" id="2_xl2ix"]
+[ext_resource type="ArrayMesh" path="res://vehicles/russian/uaz452_wheel.res" id="2_xl2ix"]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_46a5h"]
-albedo_texture = ExtResource("2_xl2ix")
-roughness = 0.65
-texture_filter = 2
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pde63"]
-albedo_color = Color(0.09411765, 0.105882354, 0.1254902, 1)
-roughness = 0.95
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_ut6qe"]
-material = SubResource("StandardMaterial3D_pde63")
-top_radius = 0.33777776
-bottom_radius = 0.33777776
-height = 0.21111111
-radial_segments = 12
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5u75e"]
-albedo_color = Color(0.5921569, 0.61960787, 0.6117647, 1)
-metallic = 0.5
-roughness = 0.6
-
-[sub_resource type="BoxMesh" id="BoxMesh_cch45"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_7800f"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_1w0o7"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_5oaom"]
-material = SubResource("StandardMaterial3D_pde63")
-top_radius = 0.33777776
-bottom_radius = 0.33777776
-height = 0.21111111
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_jdft2"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_b5nng"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_qfo7s"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_w3sj2"]
-material = SubResource("StandardMaterial3D_pde63")
-top_radius = 0.33777776
-bottom_radius = 0.33777776
-height = 0.21111111
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_v8guh"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_f7eqh"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_gsjvw"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_opip6"]
-material = SubResource("StandardMaterial3D_pde63")
-top_radius = 0.33777776
-bottom_radius = 0.33777776
-height = 0.21111111
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="BoxMesh_cxyve"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_aiun6"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[sub_resource type="BoxMesh" id="BoxMesh_ndnw3"]
-material = SubResource("StandardMaterial3D_5u75e")
-size = Vector3(0.07431111, 0.025, 0.42222223)
-
-[node name="UAZ452" type="MeshInstance3D" unique_id=642451584]
+[node name="UAZ452" type="MeshInstance3D" unique_id=1164408540]
 mesh = ExtResource("1_662pw")
-surface_material_override/0 = SubResource("StandardMaterial3D_46a5h")
-metadata/headlight_height = 0.72
+metadata/headlight_height = 0.78
+metadata/authored_materials = true
 
-[node name="UAZ452_Wheel_fl" type="MeshInstance3D" parent="." unique_id=2050468474]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.84444445, 0.33777776, 1.2666667)
-mesh = SubResource("CylinderMesh_ut6qe")
+[node name="UAZ452_Wheel_fl" type="MeshInstance3D" parent="." unique_id=1798096721]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.8444444, 0.3377778, 1.2666667)
+mesh = ExtResource("2_xl2ix")
 
-[node name="@MeshInstance3D@50" type="MeshInstance3D" parent="UAZ452_Wheel_fl" unique_id=1288222075]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_cch45")
+[node name="UAZ452_Wheel_rl" type="MeshInstance3D" parent="." unique_id=682639599]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.8444444, 0.3377778, -1.1611111)
+mesh = ExtResource("2_xl2ix")
 
-[node name="@MeshInstance3D@51" type="MeshInstance3D" parent="UAZ452_Wheel_fl" unique_id=145766663]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_7800f")
+[node name="UAZ452_Wheel_fr" type="MeshInstance3D" parent="." unique_id=1832196795]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8444444, 0.3377778, 1.2666667)
+mesh = ExtResource("2_xl2ix")
 
-[node name="@MeshInstance3D@52" type="MeshInstance3D" parent="UAZ452_Wheel_fl" unique_id=604590985]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_1w0o7")
-
-[node name="UAZ452_Wheel_rl" type="MeshInstance3D" parent="." unique_id=1493058365]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.84444445, 0.33777776, -1.1611111)
-mesh = SubResource("CylinderMesh_5oaom")
-
-[node name="@MeshInstance3D@53" type="MeshInstance3D" parent="UAZ452_Wheel_rl" unique_id=1567432454]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_jdft2")
-
-[node name="@MeshInstance3D@54" type="MeshInstance3D" parent="UAZ452_Wheel_rl" unique_id=1076183223]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_b5nng")
-
-[node name="@MeshInstance3D@55" type="MeshInstance3D" parent="UAZ452_Wheel_rl" unique_id=624802379]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.111555554, 0)
-mesh = SubResource("BoxMesh_qfo7s")
-
-[node name="UAZ452_Wheel_fr" type="MeshInstance3D" parent="." unique_id=2006231501]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.84444445, 0.33777776, 1.2666667)
-mesh = SubResource("CylinderMesh_w3sj2")
-
-[node name="@MeshInstance3D@56" type="MeshInstance3D" parent="UAZ452_Wheel_fr" unique_id=804418312]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_v8guh")
-
-[node name="@MeshInstance3D@57" type="MeshInstance3D" parent="UAZ452_Wheel_fr" unique_id=1827128917]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_f7eqh")
-
-[node name="@MeshInstance3D@58" type="MeshInstance3D" parent="UAZ452_Wheel_fr" unique_id=2118742208]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_gsjvw")
-
-[node name="UAZ452_Wheel_rr" type="MeshInstance3D" parent="." unique_id=660202132]
-transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.84444445, 0.33777776, -1.1611111)
-mesh = SubResource("CylinderMesh_opip6")
-
-[node name="@MeshInstance3D@59" type="MeshInstance3D" parent="UAZ452_Wheel_rr" unique_id=789745232]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_cxyve")
-
-[node name="@MeshInstance3D@60" type="MeshInstance3D" parent="UAZ452_Wheel_rr" unique_id=1159156034]
-transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_aiun6")
-
-[node name="@MeshInstance3D@61" type="MeshInstance3D" parent="UAZ452_Wheel_rr" unique_id=817012941]
-transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.111555554, 0)
-mesh = SubResource("BoxMesh_ndnw3")
+[node name="UAZ452_Wheel_rr" type="MeshInstance3D" parent="." unique_id=595829751]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8444444, 0.3377778, -1.1611111)
+mesh = ExtResource("2_xl2ix")

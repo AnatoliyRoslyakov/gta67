@@ -90,7 +90,7 @@ func _ready() -> void:
 	# Give painted body panels a restrained clear-coat response to reflection probes.
 	for index in model.mesh.get_surface_count():
 		var source: Material = model.get_active_material(index)
-		if source is StandardMaterial3D:
+		if source is StandardMaterial3D and not model.get_meta("authored_materials", false):
 			var finish := source.duplicate() as StandardMaterial3D
 			finish.metallic = 0.18
 			finish.roughness = 0.34

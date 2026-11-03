@@ -12,3 +12,5 @@ Source: https://opengameart.org/content/pack-of-extremly-low-poly-soviet-vehicle
 License: CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/
 Adaptations for GTA67: metre scaling, separated replacement wheels, materials and Godot vehicle scenes.
 The three VAZ liveries share the author's classic VAZ body mesh.
+
+2026 model rebuild: the current Godot scenes use newly authored geometry and solid-color materials from tools/build_russian_models.gd. Earlier CC0 source geometry/textures have been replaced; established vehicle dimensions and mounting positions are retained. Original source attribution above is kept for provenance. No purchased POLYGON City geometry or textures are included.
