@@ -149,11 +149,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _profile(path: String) -> Dictionary:
-	if "VAZ2101" in path: return {"mass": 1000.0, "force": 1400.0, "speed": 37.0}
-	if "VAZ2105" in path: return {"mass": 1050.0, "force": 1500.0, "speed": 40.0}
-	if "VAZ2106" in path: return {"mass": 1050.0, "force": 1600.0, "speed": 42.0}
 	if "UAZ469" in path: return {"mass": 1650.0, "force": 1100.0, "speed": 34.0}
-	if "UAZ452" in path: return {"mass": 1900.0, "force": 1200.0, "speed": 32.0}
 	if "Muscle" in path: return {"mass": 1650.0, "force": 3000.0, "speed": 54.0}
 	if "Ambo" in path: return {"mass": 2550.0, "force": 3300.0, "speed": 37.0}
 	if "Van" in path: return {"mass": 2050.0, "force": 2600.0, "speed": 38.0}

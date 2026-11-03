@@ -12,11 +12,7 @@ const VEHICLES := [
 	["Police", "Police", 3800.0],
 	["Van", "Van", 2800.0],
 	["Ambulance", "Ambo", 3000.0],
-	["ВАЗ-2101", "VAZ2101", 1400.0],
-	["ВАЗ-2105", "VAZ2105", 1500.0],
-	["ВАЗ-2106", "VAZ2106", 1600.0],
 	["УАЗ-469", "UAZ469", 1100.0],
-	["УАЗ «Буханка»", "UAZ452", 1200.0],
 ]
 
 @onready var car_container: GridContainer = %CarContainer

@@ -1,18 +1,9 @@
-Pack of extremply low poly soviet vehicles in pixel art style.
-Contains:
-Vaz Classics: 2101 Yellow, grey, 2105 green, baklajan, police, 2106 blue, red.
-Bobik (Uaz 469) : grey, khaki and police  modifications
-Buhanka (Uaz 459) : grey, khaki, police, ER modifications
-Bus liaz 677. Contains 1-frame opening door animation (UV coords shift {0.0, 0.5})
-Tramway KTM5. Contains 1-frame opening door animation (UV coords shift {0.0, 0.5})
+UAZ-469 reference rebuild: original Blender geometry authored for GTA67.
+Authoring source: tools/build_uaz469.py and vehicles/russian/source/uaz469.blend.
+Vehicle dimensions and reference URLs are recorded in the script and README.
+Reference photographs and purchased POLYGON City assets are not embedded or redistributed.
 
-License CC0.
-2025 MadMedicSoft
+Historical provenance: the first Russian vehicle revision used MadMedicSoft's
+2025 CC0 Soviet vehicles pack. Its geometry and textures have since been replaced.
 Source: https://opengameart.org/content/pack-of-extremly-low-poly-soviet-vehicles-in-pixel-art-style
-License: CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/
-Adaptations for GTA67: metre scaling, separated replacement wheels, materials and Godot vehicle scenes.
-The three VAZ liveries share the author's classic VAZ body mesh.
-
-2026 model rebuild: the current Godot scenes use newly authored geometry and solid-color materials from tools/build_russian_models.gd. Earlier CC0 source geometry/textures have been replaced; established vehicle dimensions and mounting positions are retained. Original source attribution above is kept for provenance. No purchased POLYGON City geometry or textures are included.
-
-UAZ-469 reference rebuild: original Blender geometry authored for GTA67 (tools/build_uaz469.py). Vehicle dimensions and reference URLs are recorded in the script and README. Reference photographs and purchased assets are not embedded or redistributed.
+Original pack license: CC0 1.0 https://creativecommons.org/publicdomain/zero/1.0/

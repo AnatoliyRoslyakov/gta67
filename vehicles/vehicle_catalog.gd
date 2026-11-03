@@ -1,6 +1,6 @@
 extends RefCounted
 
-const RUSSIAN_KINDS := ["VAZ2101", "VAZ2105", "VAZ2106", "UAZ469", "UAZ452"]
+const RUSSIAN_KINDS := ["UAZ469"]
 
 
 static func model_path(kind: String) -> String:
