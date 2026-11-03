@@ -57,7 +57,7 @@ func _ready() -> void:
 	shape.size = Vector3(model_bounds.size.x * 0.87, model_bounds.size.y * 0.75, model_bounds.size.z * 0.94)
 	collider.position.x = model_bounds.get_center().x
 	collider.position.z = model_bounds.get_center().z
-	wheelbase = clampf(model_bounds.size.z * 0.57, 2.0, 3.1)
+	wheelbase = float(model.get_meta("wheelbase", clampf(model_bounds.size.z * 0.57, 2.0, 3.1)))
 	collider.shape = shape
 	add_child(collider)
 	var tire_floor := INF
@@ -114,13 +114,14 @@ func _ready() -> void:
 		lamp_height = 0.68
 		tail_height = 0.75
 	lamp_height = float(model.get_meta("headlight_height", lamp_height))
+	tail_height = float(model.get_meta("tail_light_height", tail_height))
 	for side in [-1, 1]:
-		var x: float = body_bounds.get_center().x + side * body_bounds.size.x * 0.27
-		var tail_x: float = body_bounds.get_center().x + side * body_bounds.size.x * tail_width_fraction
+		var x: float = body_bounds.get_center().x + side * float(model.get_meta("headlight_half_width", body_bounds.size.x * 0.27))
+		var tail_x: float = body_bounds.get_center().x + side * float(model.get_meta("tail_light_half_width", body_bounds.size.x * tail_width_fraction))
 		brake_lights.append(_lamp(Vector2(tail_x, tail_height), false, Color("b81e24")))
 		headlights.append(_lamp(Vector2(x, lamp_height), true, Color("fff0ce")))
-		var turn_x: float = body_bounds.get_center().x + side * body_bounds.size.x * 0.34
-		turn_lights.append(_lamp(Vector2(turn_x, lamp_height), true, Color("e99a31"), Vector2(0.095, 0.07)))
+		var turn_x: float = body_bounds.get_center().x + side * float(model.get_meta("turn_light_half_width", body_bounds.size.x * 0.34))
+		turn_lights.append(_lamp(Vector2(turn_x, float(model.get_meta("turn_light_height", lamp_height))), true, Color("e99a31"), Vector2(0.095, 0.07)))
 	headlight_beam = SpotLight3D.new()
 	headlight_beam.position = (headlights[0].get_aabb().get_center() + headlights[1].get_aabb().get_center()) * 0.5 + Vector3(0, 0, 0.08)
 	headlight_beam.rotation = Vector3(-0.07, PI, 0)

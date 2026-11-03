@@ -5,7 +5,8 @@ var surfaces: Dictionary = {}
 var mats: Dictionary = {}
 
 func _initialize() -> void:
-	for kind in ["VAZ2101", "VAZ2105", "VAZ2106", "UAZ469", "UAZ452"]:
+	# UAZ469 has its own reference-based Blender authoring pipeline.
+	for kind in ["VAZ2101", "VAZ2105", "VAZ2106", "UAZ452"]:
 		build(kind)
 	quit()
 

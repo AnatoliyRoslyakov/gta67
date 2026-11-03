@@ -98,7 +98,7 @@ func _ready() -> void:
 			finish.clearcoat = 0.5
 			finish.clearcoat_roughness = 0.2
 			model.set_surface_override_material(index, finish)
-	var driver := Vector3(0.38, minf(bounds.end.y - 0.22, 1.36), 0.05)
+	var driver: Vector3 = model.get_meta("driver_position", Vector3(0.38, minf(bounds.end.y - 0.22, 1.36), 0.05))
 	if is_instance_valid(steering_mesh): driver = steering_mesh.position + Vector3(0, 0.27, -0.42)
 	$InteriorCameraPosition.position = driver
 	$CameraBase.position = Vector3(0, minf(bounds.end.y, 1.65), 0)
@@ -112,9 +112,10 @@ func _ready() -> void:
 	$CPUParticles3D.amount = 30
 	$BlobShadow.size = Vector3(bounds.size.x + 0.4, 4, bounds.size.z + 0.4)
 	var lamp_height: float = model.get_meta("headlight_height", 0.7)
-	$HeadlightL.position = Vector3(bounds.size.x * 0.31, lamp_height, bounds.end.z)
-	$HeadlightR.position = Vector3(-bounds.size.x * 0.31, lamp_height, bounds.end.z)
-	_build_cabin(driver, bounds)
+	var lamp_x: float = model.get_meta("headlight_half_width", bounds.size.x * 0.31)
+	$HeadlightL.position = Vector3(lamp_x, lamp_height, bounds.end.z)
+	$HeadlightR.position = Vector3(-lamp_x, lamp_height, bounds.end.z)
+	if not model.get_meta("authored_cabin", false): _build_cabin(driver, bounds)
 	camera.update_camera()
 	super._ready()
 

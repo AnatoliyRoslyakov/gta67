@@ -14,3 +14,5 @@ Adaptations for GTA67: metre scaling, separated replacement wheels, materials an
 The three VAZ liveries share the author's classic VAZ body mesh.
 
 2026 model rebuild: the current Godot scenes use newly authored geometry and solid-color materials from tools/build_russian_models.gd. Earlier CC0 source geometry/textures have been replaced; established vehicle dimensions and mounting positions are retained. Original source attribution above is kept for provenance. No purchased POLYGON City geometry or textures are included.
+
+UAZ-469 reference rebuild: original Blender geometry authored for GTA67 (tools/build_uaz469.py). Vehicle dimensions and reference URLs are recorded in the script and README. Reference photographs and purchased assets are not embedded or redistributed.

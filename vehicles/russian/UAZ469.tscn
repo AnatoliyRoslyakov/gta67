@@ -3,23 +3,31 @@
 [ext_resource type="ArrayMesh" path="res://vehicles/russian/uaz469_body.res" id="1_qkaty"]
 [ext_resource type="ArrayMesh" path="res://vehicles/russian/uaz469_wheel.res" id="2_mqqpq"]
 
-[node name="UAZ469" type="MeshInstance3D" unique_id=86597625]
+[node name="UAZ469" type="MeshInstance3D" unique_id=1555197668]
 mesh = ExtResource("1_qkaty")
-metadata/headlight_height = 1.05
+metadata/headlight_height = 1.083
+metadata/headlight_half_width = 0.633
+metadata/tail_light_height = 1.05
+metadata/tail_light_half_width = 0.68
+metadata/turn_light_height = 0.837
+metadata/turn_light_half_width = 0.654
 metadata/authored_materials = true
+metadata/authored_cabin = true
+metadata/wheelbase = 2.38
+metadata/driver_position = Vector3(0.42, 1.54, -0.35)
 
-[node name="UAZ469_Wheel_fl" type="MeshInstance3D" parent="." unique_id=886825913]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.375, 1.5375)
+[node name="UAZ469_Wheel_fl" type="MeshInstance3D" parent="." unique_id=1650798815]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.7265, 0.39, 1.19)
 mesh = ExtResource("2_mqqpq")
 
-[node name="UAZ469_Wheel_rl" type="MeshInstance3D" parent="." unique_id=218548665]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.75, 0.375, -1.05)
+[node name="UAZ469_Wheel_rl" type="MeshInstance3D" parent="." unique_id=1747618326]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.7265, 0.39, -1.19)
 mesh = ExtResource("2_mqqpq")
 
-[node name="UAZ469_Wheel_fr" type="MeshInstance3D" parent="." unique_id=1094637535]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.375, 1.5375)
+[node name="UAZ469_Wheel_fr" type="MeshInstance3D" parent="." unique_id=1548768326]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.7265, 0.39, 1.19)
 mesh = ExtResource("2_mqqpq")
 
-[node name="UAZ469_Wheel_rr" type="MeshInstance3D" parent="." unique_id=1615094218]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 0.375, -1.05)
+[node name="UAZ469_Wheel_rr" type="MeshInstance3D" parent="." unique_id=1757244013]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.7265, 0.39, -1.19)
 mesh = ExtResource("2_mqqpq")
