@@ -115,6 +115,34 @@ def glass_panel(name,points,frame=PAINT):
     mesh(name+' glass',points,[tuple(range(len(points)))],'Glass')
     # Frame is separate from glazing, guaranteeing a clear view from the cockpit.
 
+# Subdivide the pressed arch contour with a Catmull-Rom curve, preserving endpoints.
+def soften(points,steps=4):
+    out=[]
+    pts=[Vector(p) for p in points]
+    for i in range(len(pts)-1):
+        a=pts[max(0,i-1)];b=pts[i];c=pts[i+1];d=pts[min(len(pts)-1,i+2)]
+        for j in range(steps):
+            t=j/steps;out.append(tuple(.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t*t+(-a+3*b-3*c+d)*t*t*t)))
+    return out+[points[-1]]
+def profile_at(points,z):
+    for a,b in zip(points,points[1:]):
+        if a[0]<=z<=b[0]:
+            t=(z-a[0])/(b[0]-a[0]);return a[1]+t*(b[1]-a[1])
+    return points[0][1] if z<points[0][0] else points[-1][1]
+
+def wheelhouse(name,side,profile,outer,inner):
+    # A real return flange and inner liner, using exactly the opening contour.
+    rings=[]
+    for z,y in profile:
+        rings.append([(side*outer,y+.048,z),(side*(outer+.020),y+.026,z),
+                      (side*(outer+.024),y+.008,z),(side*(outer+.016),y-.004,z),
+                      (side*(outer-.015),y-.008,z),(side*(outer-.025),y+.012,z)])
+    strip(name+' rolled steel return',rings,PAINT,cap=True)
+    vs=[]
+    for z,y in profile:vs.extend([(side*(outer-.020),y+.014,z),(side*inner,y+.014,z)])
+    liner=mesh(name+' inner wheel tub',vs,[(2*i,2*i+1,2*i+3,2*i+2) for i in range(len(profile)-1)],BLACK,smooth=True)
+    mod=liner.modifiers.new('Wheel tub sheet thickness','SOLIDIFY');mod.thickness=.012
+
 # Ladder chassis, portal axles, springs, tanks: military ground clearance 0.30 m.
 for x in [-.48,.48]:box('ladder chassis',(x,.48,-.04),(.09,.12,3.55),BLACK)
 for z in [-1.19,1.19]:
@@ -130,8 +158,13 @@ rod('exhaust',(-.45,.35,.35),(-.48,.35,-1.90),.027,BLACK)
 
 # Four separately outlined doors, rear body tub and front cowl.
 front_door=[(.47,1.29),(-.35,1.29),(-.35,.58),(.16,.58),(.40,.67)]
-rear_door=[(-.36,1.29),(-1.13,1.29),(-1.13,1.03),(-.84,.98),(-.68,.67),(-.36,.58)]
-rear_quarter=[(-1.14,1.29),(-1.85,1.29),(-1.85,.59),(-1.68,.59),(-1.60,.85),(-1.45,1.00),(-1.14,1.03)]
+# The door cutout, quarter panel and folded lip share one continuous curve.
+rear_arch=soften([(-1.78,.58),(-1.69,.73),(-1.56,.94),(-1.43,1.005),
+                  (-1.02,1.005),(-.87,.93),(-.74,.70),(-.69,.62)],6)
+rear_split=-1.135
+rear_y=profile_at(rear_arch,rear_split)
+rear_door=[(-.36,1.29),(-1.13,1.29),(-1.13,rear_y)]+[(z,y) for z,y in rear_arch if z>-1.13]+[(-.36,.58)]
+rear_quarter=[(-1.14,1.29),(-1.85,1.29),(-1.85,.59)]+[(z,y) for z,y in rear_arch if z<-1.14]+[(-1.14,rear_y)]
 for side in [-1,1]:
     for name,outline in [('front door',front_door),('rear door',rear_door),('rear quarter',rear_quarter)]:
         side_panel(name,side,outline,bevel=.012)
@@ -153,9 +186,9 @@ for side in [-1,1]:
     rod('fuel filler recess',(side*.844,.89,-.55),(side*.852,.89,-.55),.056,BLACK,20)
     rod('fuel cap',(side*.854,.89,-.55),(side*.867,.89,-.55),.043,PAINT,20)
     box('filler grip',(side*.878,.89,-.55),(.018,.013,.053),'Aged steel',.004)
-    # Rear wing is a separate rounded, pressed steel wheel arch.
-    arch=[(-1.78,.55),(-1.70,.72),(-1.60,.94),(-1.48,1.055),(-.96,1.055),(-.83,.95),(-.71,.70)]
-    tube('rear arch rolled lip',[(side*.873,y,z) for z,y in arch],.019)
+    wheelhouse('rear arch',side,rear_arch,.835,.565)
+    # Close the inboard wheelhouse above the tire without filling the opening.
+    side_panel('rear inner wing',side,[(-1.80,1.20),(-.68,1.20)]+list(reversed(rear_arch)),x=.555,material=BLACK,bevel=.004)
     # Mudflaps mounted behind each wheel.
     for z in [1.19,-1.19]:box('mud flap',(side*.725,.39,z-.41),(.25,.33,.025),BLACK,.006)
 
@@ -190,23 +223,21 @@ for x in [-.55,.55]:box('bonnet hinge',(x,1.383,.515),(.14,.013,.065),'Aged stee
 
 # Bulged front wings with cut-away wheel openings. Outer sheet rounds into hood.
 arch_top=[(.49,.64),(.61,.72),(.73,.99),(.88,1.075),(1.46,1.075),(1.61,.98),(1.73,.70),(1.79,.66)]
-# Subdivide the pressed arch contour with a Catmull-Rom curve, preserving endpoints.
-def soften(points,steps=4):
-    out=[]
-    pts=[Vector(p) for p in points]
-    for i in range(len(pts)-1):
-        a=pts[max(0,i-1)];b=pts[i];c=pts[i+1];d=pts[min(len(pts)-1,i+2)]
-        for j in range(steps):
-            t=j/steps;out.append(tuple(.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t*t+(-a+3*b-3*c+d)*t*t*t)))
-    return out+[points[-1]]
 arch_top=soften(arch_top)
 for side in [-1,1]:
     rings=[]
     for z,low in arch_top:
         high=1.245-.018*(z-.5)
-        rings.append([(side*.73,high,z),(side*.80,high+.015,z),(side*.855,high-.005,z),(side*.885,high-.045,z),(side*.8925,high-.09,z),(side*.8925,low+.035,z),(side*.877,low,z),(side*.844,low,z)])
+        rings.append([(side*.725,high,z),(side*.795,high+.018,z),(side*.849,high+.002,z),(side*.880,high-.025,z),(side*.8925,high-.065,z),(side*.8925,low+.040,z),(side*.881,low+.014,z),(side*.859,low+.005,z),(side*.837,low+.019,z),(side*.825,low+.045,z)])
     strip('front rounded wing',rings,cap=True)
-    tube('front arch rolled lip',[(side*.886,y+.013,z) for z,y in arch_top],.013)
+    # The inner liner joins the wing's folded edge, rather than a floating trim tube.
+    vs=[]
+    for z,y in arch_top:vs.extend([(side*.839,y+.023,z),(side*.57,y+.023,z)])
+    liner=mesh('front wing inner return',vs,[(2*i,2*i+1,2*i+3,2*i+2) for i in range(len(arch_top)-1)],BLACK,smooth=True)
+    mod=liner.modifiers.new('Pressed liner thickness','SOLIDIFY');mod.thickness=.012
+    # Close the rear termination into the cowl and the leading edge into the nose.
+    side_panel('wing cowl junction',side,[(.475,.66),(.535,.69),(.535,1.25),(.475,1.30)],x=.816,thick=.045,bevel=.018)
+    side_panel('wing nose junction',side,[(1.755,.66),(1.805,.66),(1.805,1.19),(1.755,1.23)],x=.765,thick=.095,bevel=.018)
 
 # Front panel with TWO rounded horizontal grille openings, not Jeep vertical slots.
 front_round('nose backing',0,.99,1.782,1.52,.49,.10,PAINT,.04)
@@ -309,9 +340,40 @@ for side in [-1,1]:
     pts=[(side*.809,1.50,-1.25),(side*.809,1.50,-1.70),(side*.809,1.83,-1.70),(side*.809,1.83,-1.25)]
     glass_panel('rear curtain flexible window',pts,CANVAS)
     for z in [-1.16,-1.39,-1.64,-1.80]:
-        tube('canvas tension fold',[(side*.811,1.29,z),(side*.819,1.39,z+.03),(side*.806,1.54,z+.06)],.004,'Canvas seams')
-        box('canvas tie strap',(side*.843,1.26,z),(.014,.12,.027),'Canvas seams',.003)
-        rod('canvas fastening button',(side*.846,1.22,z),(side*.856,1.22,z),.009,'Aged steel',8)
+        tube('canvas tension fold',[(side*.851,1.30,z),(side*.819,1.39,z+.03),(side*.806,1.54,z+.06)],.004,'Canvas seams')
+        box('canvas tie strap',(side*.865,1.285,z),(.014,.12,.027),'Canvas seams',.003)
+        rod('canvas fastening button',(side*.859,1.235,z),(side*.877,1.235,z),.009,'Aged steel',8)
+# Cloth overlaps the steel tub; a rounded apron bridges the inset upper curtain
+# to the outside of the body. All hems sit on cloth, not across an air gap.
+for side in [-1,1]:
+    rings=[]
+    for z in [-1.115,-1.30,-1.52,-1.73,-1.845]:
+        rings.append([(side*.801,1.405,z),(side*.811,1.345,z),
+                      (side*.843,1.298,z),(side*.858,1.267,z),
+                      (side*.854,1.228,z),(side*.842,1.228,z),
+                      (side*.831,1.275,z),(side*.797,1.38,z)])
+    strip('canvas overlapping side apron',rings,CANVAS,cap=True)
+    tube('canvas lower side welt',[(side*.858,1.239,z) for z in [-1.115,-1.30,-1.52,-1.73,-1.845]],.006,'Canvas seams')
+rings=[]
+for x in [-.854,-.65,-.35,0,.35,.65,.854]:
+    rings.append([(x,1.405,-1.829),(x,1.345,-1.842),(x,1.298,-1.867),
+                  (x,1.267,-1.878),(x,1.228,-1.874),(x,1.228,-1.862),
+                  (x,1.275,-1.850),(x,1.38,-1.817)])
+strip('canvas overlapping rear apron',rings,CANVAS,cap=True)
+tube('canvas lower rear welt',[(x,1.239,-1.878) for x in [-.85,-.55,0,.55,.85]],.006,'Canvas seams')
+for side in [-1,1]:
+    # Cover the upright rear corner and turn the hem smoothly around it.
+    corner=[]
+    for y in [1.23,1.28,1.40,1.65,1.94]:
+        outx=.854 if y<1.3 else .805
+        outz=-1.875 if y<1.3 else -1.838
+        corner.append([(side*outx,y,outz+.035),(side*outx,y,outz+.014),
+                       (side*(outx-.010),y,outz),(side*(outx-.035),y,outz)])
+    strip('canvas rear corner binding',corner,CANVAS,cap=True)
+for x in [-.70,-.48,0,.48,.70]:
+    box('rear canvas tie strap',(x,1.29,-1.886),(.027,.12,.012),'Canvas seams',.003)
+    rod('rear canvas fastening button',(x,1.24,-1.886),(x,1.24,-1.898),.009,'Aged steel',8)
+
 # Rear curtain with a real central aperture.
 for x,w in [(-.60,.40),(.60,.40)]:box('rear canvas edge',(x,1.64,-1.826),(w,.61,.012),CANVAS,.015)
 box('rear canvas below window',(0,1.40,-1.826),(.80,.14,.012),CANVAS,.01)
