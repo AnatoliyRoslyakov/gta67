@@ -50,7 +50,7 @@ func _ready() -> void:
 		remove_child(wheel)
 		for old_visual in wheel.get_children(): old_visual.free()
 		wheel.use_as_steering = i == 0 or i == 2
-		wheel.use_as_traction = i == 1 or i == 3
+		wheel.use_as_traction = "UAZ" in vehicle_scene.resource_path or i == 1 or i == 3
 		wheel.wheel_rest_length = 0.20
 		wheel.suspension_travel = 0.15
 		wheel.suspension_stiffness = 32.0
@@ -111,8 +111,9 @@ func _ready() -> void:
 	$CPUParticles3D.position = Vector3(0.4, 0.26, bounds.position.z)
 	$CPUParticles3D.amount = 30
 	$BlobShadow.size = Vector3(bounds.size.x + 0.4, 4, bounds.size.z + 0.4)
-	$HeadlightL.position = Vector3(bounds.size.x * 0.31, 0.7, bounds.end.z)
-	$HeadlightR.position = Vector3(-bounds.size.x * 0.31, 0.7, bounds.end.z)
+	var lamp_height: float = model.get_meta("headlight_height", 0.7)
+	$HeadlightL.position = Vector3(bounds.size.x * 0.31, lamp_height, bounds.end.z)
+	$HeadlightR.position = Vector3(-bounds.size.x * 0.31, lamp_height, bounds.end.z)
 	_build_cabin(driver, bounds)
 	camera.update_camera()
 	super._ready()
@@ -147,6 +148,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _profile(path: String) -> Dictionary:
+	if "VAZ2101" in path: return {"mass": 1000.0, "force": 1400.0, "speed": 37.0}
+	if "VAZ2105" in path: return {"mass": 1050.0, "force": 1500.0, "speed": 40.0}
+	if "VAZ2106" in path: return {"mass": 1050.0, "force": 1600.0, "speed": 42.0}
+	if "UAZ469" in path: return {"mass": 1650.0, "force": 1100.0, "speed": 34.0}
+	if "UAZ452" in path: return {"mass": 1900.0, "force": 1200.0, "speed": 32.0}
 	if "Muscle" in path: return {"mass": 1650.0, "force": 3000.0, "speed": 54.0}
 	if "Ambo" in path: return {"mass": 2550.0, "force": 3300.0, "speed": 37.0}
 	if "Van" in path: return {"mass": 2050.0, "force": 2600.0, "speed": 38.0}

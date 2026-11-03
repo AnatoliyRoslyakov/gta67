@@ -113,6 +113,7 @@ func _ready() -> void:
 	elif "Muscle" in path:
 		lamp_height = 0.68
 		tail_height = 0.75
+	lamp_height = float(model.get_meta("headlight_height", lamp_height))
 	for side in [-1, 1]:
 		var x: float = body_bounds.get_center().x + side * body_bounds.size.x * 0.27
 		var tail_x: float = body_bounds.get_center().x + side * body_bounds.size.x * tail_width_fraction

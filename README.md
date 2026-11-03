@@ -1,8 +1,8 @@
-# GTA67 — 2.0.0
+# GTA67 — 2.0.1
 
 Godot 4.7 city sandbox based on POLYGON City and the Truck Town vehicle controller.
 
-Open `project.godot` and press F5 to launch the vehicle selector. Eight vehicles have individually fitted wheels, suspension and cabin cameras. Leave the car to walk, run, jump and use a pistol in first or third person.
+Open `project.godot` and press F5 to launch the vehicle selector. Thirteen vehicle choices have individually fitted wheels, suspension and cabin cameras. Leave the car to walk, run, jump and use a pistol in first or third person.
 
 The city has 40 civilian cars, 64 pedestrians, parked cars, seven signal-controlled junctions and 24 crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. Civilian traffic uses fixed phases without lane changes. Cars steer through rounded corners with a speed-dependent bicycle model, brake before turns and maintain gaps based on vehicle length. Six civilian model types spawn in shuffled batches with varied paint tints, acceleration, cruising speed and following distance; each session randomizes routing. Model-sized colliders and three obstacle rays cover the car body, while dead-end lane branches are removed from the driving network. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
 
@@ -22,7 +22,7 @@ On the development Mac (M1 Pro, 1280×720, stationary day/night views, equal 60 
 
 Purchased assets are excluded from Git. Keep the supplied Godot-converted pack at `Assets/Synty/PolygonCity/` inside this project. The map is `Scenes/Demo.tscn`; cars are in `Prefabs/Vehicles/`.
 
-This version is on branch `2.0.0`. Purchased models, textures and map files are never included in commits.
+This version is on branch `2.0.1`. Purchased models, textures and map files are never included in commits.
 
 ## Controls
 
@@ -65,3 +65,9 @@ The player car uses `VehicleBody3D` with model-specific wheel centers and suspen
 
 - [tree low-poly](https://sketchfab.com/3d-models/tree-low-poly-4cd243eb74c74b3ea2190ebcec0439fb) by Ricardo Sanchez (https://sketchfab.com/380660711785)
 - [Lowpoly lamp](https://sketchfab.com/3d-models/lowpoly-lamp-c020f6af78f7482f8cf2ac84d05c08a5) by RitiWox (https://sketchfab.com/RitiWox)
+
+## Russian vehicles
+
+Version 2.0.1 adds VAZ-2101, VAZ-2105 and VAZ-2106 liveries (sharing one classic VAZ body), UAZ-469 and the UAZ Bukhanka van to the vehicle selector and civilian traffic. The UAZ choices use four-wheel drive; each choice has its own mass, engine force and speed limit. Models use the author's low-poly pixel-art textures, with replacement rotating wheels, metre scale and runtime cabin details fitted for the existing controller.
+
+Source: [MadMedicSoft — Soviet vehicles pack](https://opengameart.org/content/pack-of-extremly-low-poly-soviet-vehicles-in-pixel-art-style), CC0 1.0 (2025). The author's corrected Bukhanka UV mesh is used. These freely redistributable assets and their license are included in `vehicles/russian/`; the purchased POLYGON City assets remain local.

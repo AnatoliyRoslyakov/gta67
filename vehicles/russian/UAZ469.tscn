@@ -1,0 +1,163 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://vehicles/russian/uaz469_body.res" id="1_qkaty"]
+[ext_resource type="Texture2D" path="res://vehicles/russian/textures/bobik_albedo.png" id="2_mqqpq"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_qf2np"]
+albedo_texture = ExtResource("2_mqqpq")
+roughness = 0.65
+texture_filter = 2
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ego83"]
+albedo_color = Color(0.09411765, 0.105882354, 0.1254902, 1)
+roughness = 0.95
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_d5rig"]
+material = SubResource("StandardMaterial3D_ego83")
+top_radius = 0.375
+bottom_radius = 0.375
+height = 0.3
+radial_segments = 12
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ndw34"]
+albedo_color = Color(0.5921569, 0.61960787, 0.6117647, 1)
+metallic = 0.5
+roughness = 0.6
+
+[sub_resource type="BoxMesh" id="BoxMesh_akr7y"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_7ua8l"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_rlpn1"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_0lqe2"]
+material = SubResource("StandardMaterial3D_ego83")
+top_radius = 0.375
+bottom_radius = 0.375
+height = 0.3
+radial_segments = 12
+
+[sub_resource type="BoxMesh" id="BoxMesh_2ayw0"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_edx65"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_xpdo7"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_4a4kb"]
+material = SubResource("StandardMaterial3D_ego83")
+top_radius = 0.375
+bottom_radius = 0.375
+height = 0.3
+radial_segments = 12
+
+[sub_resource type="BoxMesh" id="BoxMesh_57mer"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_k725m"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pgefs"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_6wri7"]
+material = SubResource("StandardMaterial3D_ego83")
+top_radius = 0.375
+bottom_radius = 0.375
+height = 0.3
+radial_segments = 12
+
+[sub_resource type="BoxMesh" id="BoxMesh_ph2dq"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_osvt2"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[sub_resource type="BoxMesh" id="BoxMesh_aq0y8"]
+material = SubResource("StandardMaterial3D_ndw34")
+size = Vector3(0.0825, 0.025, 0.46875)
+
+[node name="UAZ469" type="MeshInstance3D" unique_id=870239606]
+mesh = ExtResource("1_qkaty")
+surface_material_override/0 = SubResource("StandardMaterial3D_qf2np")
+metadata/headlight_height = 1.1
+
+[node name="UAZ469_Wheel_fl" type="MeshInstance3D" parent="." unique_id=449303418]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.75, 0.375, 1.5375)
+mesh = SubResource("CylinderMesh_d5rig")
+
+[node name="@MeshInstance3D@38" type="MeshInstance3D" parent="UAZ469_Wheel_fl" unique_id=324089717]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_akr7y")
+
+[node name="@MeshInstance3D@39" type="MeshInstance3D" parent="UAZ469_Wheel_fl" unique_id=866611116]
+transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_7ua8l")
+
+[node name="@MeshInstance3D@40" type="MeshInstance3D" parent="UAZ469_Wheel_fl" unique_id=1534782975]
+transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_rlpn1")
+
+[node name="UAZ469_Wheel_rl" type="MeshInstance3D" parent="." unique_id=699297661]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, 0.75, 0.375, -1.05)
+mesh = SubResource("CylinderMesh_0lqe2")
+
+[node name="@MeshInstance3D@41" type="MeshInstance3D" parent="UAZ469_Wheel_rl" unique_id=1067045478]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_2ayw0")
+
+[node name="@MeshInstance3D@42" type="MeshInstance3D" parent="UAZ469_Wheel_rl" unique_id=1106547954]
+transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_edx65")
+
+[node name="@MeshInstance3D@43" type="MeshInstance3D" parent="UAZ469_Wheel_rl" unique_id=2143612305]
+transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, -0.156, 0)
+mesh = SubResource("BoxMesh_xpdo7")
+
+[node name="UAZ469_Wheel_fr" type="MeshInstance3D" parent="." unique_id=830813353]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.75, 0.375, 1.5375)
+mesh = SubResource("CylinderMesh_4a4kb")
+
+[node name="@MeshInstance3D@44" type="MeshInstance3D" parent="UAZ469_Wheel_fr" unique_id=1484420439]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_57mer")
+
+[node name="@MeshInstance3D@45" type="MeshInstance3D" parent="UAZ469_Wheel_fr" unique_id=1130300979]
+transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_k725m")
+
+[node name="@MeshInstance3D@46" type="MeshInstance3D" parent="UAZ469_Wheel_fr" unique_id=1205101237]
+transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_pgefs")
+
+[node name="UAZ469_Wheel_rr" type="MeshInstance3D" parent="." unique_id=725491911]
+transform = Transform3D(-4.371139e-08, -1, 0, 1, -4.371139e-08, 0, 0, 0, 1, -0.75, 0.375, -1.05)
+mesh = SubResource("CylinderMesh_6wri7")
+
+[node name="@MeshInstance3D@47" type="MeshInstance3D" parent="UAZ469_Wheel_rr" unique_id=1948334534]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_ph2dq")
+
+[node name="@MeshInstance3D@48" type="MeshInstance3D" parent="UAZ469_Wheel_rr" unique_id=543879309]
+transform = Transform3D(0.49999997, 0, 0.86602545, 0, 1, 0, -0.86602545, 0, 0.49999997, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_osvt2")
+
+[node name="@MeshInstance3D@49" type="MeshInstance3D" parent="UAZ469_Wheel_rr" unique_id=1036008386]
+transform = Transform3D(-0.50000006, 0, 0.8660254, 0, 1, 0, -0.8660254, 0, -0.50000006, 0, 0.156, 0)
+mesh = SubResource("BoxMesh_aq0y8")

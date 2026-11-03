@@ -2,6 +2,7 @@ extends Control
 
 var audio_master: int = AudioServer.get_bus_index("Master")
 
+const Catalog = preload("res://vehicles/vehicle_catalog.gd")
 const VEHICLES := [
 	["Sedan", "Sedan", 3000.0],
 	["Muscle", "Muscle", 4200.0],
@@ -11,6 +12,11 @@ const VEHICLES := [
 	["Police", "Police", 3800.0],
 	["Van", "Van", 2800.0],
 	["Ambulance", "Ambo", 3000.0],
+	["ВАЗ-2101", "VAZ2101", 1400.0],
+	["ВАЗ-2105", "VAZ2105", 1500.0],
+	["ВАЗ-2106", "VAZ2106", 1600.0],
+	["УАЗ-469", "UAZ469", 1100.0],
+	["УАЗ «Буханка»", "UAZ452", 1200.0],
 ]
 
 @onready var car_container: GridContainer = %CarContainer
@@ -32,7 +38,7 @@ var _loading := false
 var _loaded_scenes: Dictionary = {}
 
 func _ready() -> void:
-	$Subtitle.text = "v%s   ·   Truck Town   ·   Choose your vehicle" % ProjectSettings.get_setting("application/config/version", "2.0.0")
+	$Subtitle.text = "v%s   ·   Truck Town   ·   Choose your vehicle" % ProjectSettings.get_setting("application/config/version", "2.0.1")
 	var loading_layer := CanvasLayer.new()
 	loading_layer.layer = 100
 	add_child(loading_layer)
@@ -40,11 +46,11 @@ func _ready() -> void:
 	for vehicle in VEHICLES:
 		var button := Button.new()
 		button.text = vehicle[0]
-		button.custom_minimum_size = Vector2(190, 68)
+		button.custom_minimum_size = Vector2(190, 52)
 		button.pressed.connect(_load_vehicle.bind(vehicle))
 		car_container.add_child(button)
 	car_container.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	car_container.position.y -= 40
+	car_container.position.y -= 10
 	# Automatically focus the first item for gamepad accessibility.
 	focus_first_car()
 
@@ -75,7 +81,7 @@ func _load_vehicle(vehicle: Array) -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 
-	var model_path := "res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle[1]
+	var model_path := Catalog.model_path(vehicle[1])
 	var paths := ["res://town/town_scene.tscn", "res://vehicles/car_base.tscn", model_path]
 	for path in paths:
 		if _loaded_scenes.has(path): continue

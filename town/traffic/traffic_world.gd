@@ -1,5 +1,6 @@
 extends Node3D
 
+const Catalog = preload("res://vehicles/vehicle_catalog.gd")
 const Driver = preload("res://town/traffic/traffic_driver.gd")
 const Citizen = preload("res://town/traffic/citizen.gd")
 const TrafficSignal = preload("res://town/traffic/traffic_signal.gd")
@@ -8,7 +9,7 @@ const WALK_CELL := 2.5
 const DRIVER_BUCKET_SIZE := 20.0
 const DRIVER_INDEX_INTERVAL := 0.1
 const DIRECTIONS := [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]
-const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle"]
+const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle", "VAZ2101", "VAZ2105", "VAZ2106", "UAZ469", "UAZ452"]
 const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat"]
 
 @export var vehicle_count := 40
@@ -314,12 +315,12 @@ func _spawn_population() -> void:
 			model_bag.assign(VEHICLES)
 			model_bag.shuffle()
 		var vehicle_kind: String = model_bag.pop_back()
-		actor.model_scene = load("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Car_%s_01.tscn" % vehicle_kind)
-		if vehicle_kind != "Taxi":
+		actor.model_scene = load(Catalog.model_path(vehicle_kind))
+		if vehicle_kind != "Taxi" and vehicle_kind not in Catalog.RUSSIAN_KINDS:
 			actor.paint_tint = Color.from_hsv(rng.randf(), rng.randf_range(0.0, 0.3), rng.randf_range(0.65, 1.0))
 		actor.acceleration = rng.randf_range(1.3, 2.5)
 		actor.following_time = rng.randf_range(1.5, 2.1)
-		actor.cruise_speed = rng.randf_range(6.5, 10.5) * (0.85 if vehicle_kind == "Van" else 1.0)
+		actor.cruise_speed = rng.randf_range(6.5, 10.5) * (0.85 if vehicle_kind in ["Van", "UAZ469", "UAZ452"] else 1.0)
 		actor.position = p + Vector3.UP * 0.03
 		add_child(actor)
 		drivers.append(actor)
