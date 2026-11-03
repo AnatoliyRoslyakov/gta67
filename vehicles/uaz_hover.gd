@@ -3,7 +3,7 @@ extends RefCounted
 var car: VehicleBody3D
 var enabled := false
 var amount := 0.0
-var front_visuals: Array[Dictionary] = []
+var folding_visuals: Array[Dictionary] = []
 var rings: Array[MeshInstance3D] = []
 var lights: Array[SpotLight3D] = []
 var glow: Decal
@@ -21,8 +21,7 @@ func setup(vehicle: VehicleBody3D, visuals: Array[Dictionary]) -> void:
 	neon.emission = Color("00bfff")
 	neon.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	for visual in visuals:
-		if not visual.wheel.use_as_steering: continue
-		front_visuals.append(visual)
+		folding_visuals.append(visual)
 		# Both rim faces and the tread edge remain visible when wheels turn horizontal.
 		for band in [Vector3(-0.19, 0.184, 0.211), Vector3(0.19, 0.184, 0.211), Vector3(0, 0.382, 0.397)]:
 			var ring := MeshInstance3D.new()
@@ -89,7 +88,7 @@ func update(delta: float) -> void:
 	if amount <= 0: return
 	# Rebase on the wheel's current suspension transform every frame. This overrides
 	# rolling only during folding and restores normal wheels exactly on landing.
-	for visual in front_visuals:
+	for visual in folding_visuals:
 		var center: Vector3 = car.wheel_reference_centers[visual.wheel.name]
 		var side := signf(center.x)
 		var basis: Basis = Basis(Vector3.BACK, -side * PI * 0.5) * visual.transform.basis
