@@ -69,7 +69,7 @@ func _ready() -> void:
 	$CarUI.hide()
 	$GameUI/PanelContainer/MarginContainer/VBoxContainer/Label.text = "F1 — управление"
 	%Controls/Label.text = "WASD — движение • Shift — бег/ускорение\nE — сесть/выйти • C — камера • Space — прыжок/тормоз\nQ — оружие • ПКМ — прицел • ЛКМ — выстрел • R — перезарядка"
-	%Controls/Label2.text = "F — действие / сервис • Tab — заказы • Esc — пауза\nM — время суток • L — фары • H — сигнал • F5 — эвакуация ($75)"
+	%Controls/Label2.text = "F — действие / сервис • Tab — заказы • Esc — пауза\nM — время суток • L — фары • H — сигнал • F5 — эвакуация ($75)\nJ — парение УАЗ-469"
 	# Runtime ownership stays outside the purchased map scene.
 	if ResourceLoader.exists("res://town/traffic/traffic_world.gd"):
 		traffic = load("res://town/traffic/traffic_world.gd").new()

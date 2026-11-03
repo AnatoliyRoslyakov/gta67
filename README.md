@@ -37,6 +37,7 @@ This version is on branch `2.0.1`. Purchased models, textures and map files are 
 - <kbd>F</kbd>: Pick up / deliver a parcel, start the circuit or use the nearby service.
 - <kbd>Tab</kbd> or <kbd>Escape</kbd>: Pause and open the city jobs menu. Escape resumes. Choose a different car from this menu.
 - <kbd>M</kbd>: Advance to sunrise, day, sunset or night.
+- <kbd>J</kbd>: Toggle UAZ-469 hover mode: folding front wheels, cyan neon and road underglow. WASD steers/drives; Space brakes. Press J again to land. Leaving the car or wrecking it disables hover.
 - <kbd>H</kbd>: Horn. <kbd>L</kbd>: Headlights (also switch automatically at dusk).
 - <kbd>F1</kbd>: Controls. Escape from the vehicle selector exits the game.
 

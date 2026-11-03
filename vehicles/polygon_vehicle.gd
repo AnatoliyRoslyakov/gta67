@@ -2,6 +2,7 @@ extends "res://vehicles/vehicle.gd"
 
 const TIRE_CONTACT_CLEARANCE := 0.004
 
+var hover: RefCounted
 var vehicle_scene: PackedScene
 var wheel_reference_centers: Dictionary = {}
 var wheel_visible_radii: Dictionary = {}
@@ -118,6 +119,9 @@ func _ready() -> void:
 	if not model.get_meta("authored_cabin", false): _build_cabin(driver, bounds)
 	camera.update_camera()
 	super._ready()
+	if "UAZ469" in vehicle_scene.resource_path:
+		hover = preload("res://vehicles/uaz_hover.gd").new()
+		hover.setup(self, wheel_visuals)
 
 
 func _align_wheel_visuals() -> void:
@@ -140,6 +144,7 @@ func _align_wheel_visuals() -> void:
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	_align_wheel_visuals()
+	if hover != null: hover.update(delta)
 	if is_instance_valid(steering_mesh):
 		steering_mesh.transform = steering_reference * Transform3D(Basis(Vector3.UP, -steering * 2.5), Vector3.ZERO)
 	dashboard_tick -= delta
@@ -206,3 +211,10 @@ func _remove_static_bodies(node: Node) -> void:
 	for child in node.get_children():
 		if child is CollisionObject3D: child.free()
 		else: _remove_static_bodies(child)
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if hover == null or not controllable or get_tree().paused: return
+	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_J:
+		hover.toggle()
+		get_viewport().set_input_as_handled()
