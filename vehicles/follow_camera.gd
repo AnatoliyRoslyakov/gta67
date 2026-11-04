@@ -44,6 +44,14 @@ func _input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	if not body.controllable: return
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down") * delta * 1.6
+	if camera_type == CameraType.INTERIOR:
+		interior_look.x = clampf(interior_look.x - look.x, -1.35, 1.35)
+		interior_look.y = clampf(interior_look.y - look.y, -0.55, 0.45)
+	elif camera_type == CameraType.EXTERIOR and not look.is_zero_approx():
+		exterior_look.x -= look.x
+		exterior_look.y = clampf(exterior_look.y - look.y, -0.4, 0.65)
+		orbit_timeout = 2.0
 	var target: Vector3 = get_parent().global_position
 	var speed := body.linear_velocity.length()
 	if camera_type == CameraType.EXTERIOR:

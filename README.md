@@ -31,7 +31,7 @@ This version is on branch `2.0.1`. Purchased models, textures and map files are 
 - <kbd>Space</kbd>: Brake / jump.
 - <kbd>E</kbd>: Leave a stopped vehicle or enter your car when nearby.
 - <kbd>C</kbd>: Exterior / cabin / top-down camera in a car; third / first person on foot.
-- Mouse: Look on foot; hold right mouse to look around in a car.
+- Arrow keys: Look around on foot and in exterior/cabin car views. Mouse also looks on foot; hold right mouse to look around in a car.
 - <kbd>Q</kbd>: Draw or holster the pistol. Right mouse aims; left mouse fires.
 - <kbd>R</kbd>: Reload on foot / recover while driving. <kbd>F5</kbd>: Recover the car (up to $75, cancels the current job, unavailable during pursuit).
 - <kbd>F</kbd>: Pick up / deliver a parcel, start the circuit or use the nearby service.

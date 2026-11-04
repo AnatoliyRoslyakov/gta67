@@ -125,6 +125,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if weapon_drawn: shoot()
 
 func _physics_process(delta: float) -> void:
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down") * delta * 1.6
+	yaw -= look.x
+	pitch = clampf(pitch - look.y, -1.1, 1.0)
 	_hurt_cooldown = maxf(0.0, _hurt_cooldown - delta)
 	fire_time = maxf(0, fire_time - delta)
 	recoil = move_toward(recoil, 0, delta * 7)
