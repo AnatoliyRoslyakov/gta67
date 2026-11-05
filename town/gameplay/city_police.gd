@@ -201,7 +201,7 @@ func _can_see(unit: CharacterBody3D, subject: Node3D) -> bool:
 	if from.distance_squared_to(to) > (80.0 * 80.0 if town.driving else 58.0 * 58.0): return false
 	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 2 | 4 | 8, [unit.get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	return hit.is_empty() or hit.collider == subject
+	return hit.is_empty() or hit.collider == subject or (is_instance_valid(town.character.mount) and hit.collider == town.character.mount)
 
 
 func _spawn_unit() -> void:

@@ -27,6 +27,7 @@ This version is on branch `2.0.1`. Purchased models, textures and map files are 
 ## Controls
 
 - <kbd>WASD</kbd>: Drive or move on foot.
+- With the local [CJ and Gary models](characters/CREDITS.md), you start as CJ beside Gary. Press <kbd>E</kbd> to ride or dismount; WASD drives Gary, Shift accelerates, Space brakes, arrows look around, and C switches first/third person. CJ sits on the shell with hands following the eye tops. Stop before dismounting; blocked exits are rejected.
 - <kbd>Shift</kbd>: Vehicle boost / run.
 - <kbd>Space</kbd>: Brake / jump.
 - <kbd>E</kbd>: Leave a stopped vehicle or enter your car when nearby.

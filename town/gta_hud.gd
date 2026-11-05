@@ -10,6 +10,7 @@ var cash_label: Label
 var wanted_label: Label
 var clock_text := "17:30"
 var driving := true
+var riding_gary := false
 var weapon_drawn := false
 var ammo_text := "12 / 84"
 var health := 100.0
@@ -139,11 +140,12 @@ func _refresh_status() -> void:
 	var stars := clampi(wanted_level, 0, 3)
 	wanted_label.text = "★".repeat(stars) + "☆".repeat(3 - stars)
 	clock_label.text = clock_text + "   Polygon City"
-	detail_label.text = "%03d км/ч" % roundi(speed) if driving else (ammo_text + "   ПАТР." if weapon_drawn else "ПЕШКОМ")
+	detail_label.text = "%03d км/ч" % roundi(speed) if driving or riding_gary else (ammo_text + "   ПАТР." if weapon_drawn else "ПЕШКОМ")
 	boost_bar.value = boost_value if driving else health / 100.0
 	integrity_bar.visible = driving
 	integrity_bar.value = clampf(float(gameplay.get("vehicle_health", 100.0)) / 100.0, 0, 1)
 	integrity_label.text = "Кузов %d%%" % roundi(integrity_bar.value * 100) if driving else "Здоровье %d%%" % roundi(health)
+	if riding_gary: integrity_label.text = "Гэри · здоровье %d%%" % roundi(health)
 	hint_label.text = hint
 	reticle.visible = not driving and weapon_drawn
 	_refresh_gameplay()

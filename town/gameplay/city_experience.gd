@@ -289,6 +289,8 @@ func _recover_after_incident(reason: String, maximum_fee: int) -> void:
 	town.vehicle_health = maxf(town.vehicle_health, 35.0)
 	town.player_body.drive_condition = town.vehicle_health / 100.0
 	if not town.driving:
+		if is_instance_valid(town.character.mount):
+			town.character.mount.unboard(town.player_body.global_position + Vector3.UP * 2)
 		var exit: Vector3 = town._safe_exit()
 		if exit != Vector3.INF:
 			town.character.global_position = exit

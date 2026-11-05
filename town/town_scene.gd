@@ -24,6 +24,7 @@ var _hud_tick := 0.0
 var reflections_enabled := true
 var status_message := ""
 var status_time := 0.0
+var gary: CharacterBody3D
 @onready var controls_sheet: Control = %Controls
 
 func setup(car: Node3D, back_callback: Callable, reflections: bool) -> void:
@@ -80,6 +81,40 @@ func _ready() -> void:
 	gameplay.configure(self, _back_callback)
 	CityPerformance.bind_town(self)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_spawn_gary.call_deferred()
+
+func _spawn_gary() -> void:
+	if not ResourceLoader.exists("res://Assets/Characters/Gary/gary.glb"): return
+	while CityPerformance.loading: await get_tree().process_frame
+	await get_tree().physics_frame
+	var space := get_world_3d().direct_space_state
+	for offset in [Vector3(4, 0, 0), Vector3(-4, 0, 0), Vector3(0, 0, -5)]:
+		var point: Vector3 = player_body.global_transform * offset
+		var ground := space.intersect_ray(PhysicsRayQueryParameters3D.create(point + Vector3.UP * 3, point - Vector3.UP * 4, 1, [player_body.get_rid()]))
+		if ground.is_empty() or ground.normal.y < 0.8: continue
+		point = ground.position + Vector3.UP * 0.08
+		var check := PhysicsShapeQueryParameters3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(1.6, 2.2, 3.3)
+		check.shape = shape
+		check.transform = Transform3D(player_body.global_basis.orthonormalized(), point + Vector3.UP * 1.2)
+		check.collision_mask = 1 | 2 | 4 | 8
+		if not space.intersect_shape(check, 1).is_empty(): continue
+		gary = preload("res://vehicles/gary_mount.gd").new()
+		add_child(gary)
+		gary.global_transform = Transform3D(player_body.global_basis.orthonormalized(), point)
+		gary.home = gary.global_transform
+		# Start next to the mount, keeping the selected car available nearby.
+		await get_tree().physics_frame
+		var exit: Vector3 = gary.exit_position()
+		if exit != Vector3.INF:
+			player_body.set_controlled(false)
+			character.global_position = exit
+			character.yaw = gary.global_rotation.y + PI
+			character.set_active(true)
+			driving = false
+			_set_subject(character)
+		return
 
 func _physics_process(delta: float) -> void:
 	status_time = maxf(0, status_time - delta)
@@ -92,6 +127,7 @@ func _physics_process(delta: float) -> void:
 	gta_hud.wanted_level = wanted_level
 	gta_hud.clock_text = atmosphere.get_clock_text()
 	gta_hud.driving = driving
+	gta_hud.riding_gary = is_instance_valid(character.mount)
 	gta_hud.weapon_drawn = character.weapon_drawn
 	gta_hud.ammo_text = "%02d / %02d" % [character.magazine, character.reserve]
 	gta_hud.health = character.health
@@ -101,6 +137,11 @@ func _physics_process(delta: float) -> void:
 	if not driving and character.global_position.distance_to(player_body.global_position) >= 4:
 		gta_hud.hint = "Shift — бег   C — камера   Q — оружие   ПКМ — прицел"
 	if not driving and character.reload_time > 0: gta_hud.hint = "ПЕРЕЗАРЯДКА…"
+	if is_instance_valid(character.mount):
+		gta_hud.speed = character.mount.velocity.length() * 3.6
+		gta_hud.hint = "ГЭРИ · WASD — ехать   Shift — быстрее   Space — тормоз   E — слезть   Стрелки — обзор"
+	elif not driving and is_instance_valid(gary) and gary.can_mount(character):
+		gta_hud.hint = "E — сесть на Гэри   Стрелки — обзор"
 	if gameplay:
 		var action_hint: String = gameplay.context_hint()
 		if not action_hint.is_empty(): gta_hud.hint = action_hint
@@ -117,6 +158,21 @@ func _input(event: InputEvent) -> void:
 
 func _interact() -> void:
 	if transition: return
+	if is_instance_valid(character.mount):
+		if absf(character.mount.speed) > 1.0:
+			_status("Сначала остановите Гэри — Space")
+			return
+		var exit: Vector3 = character.mount.exit_position()
+		if exit == Vector3.INF:
+			_status("Нет свободного места для спешивания")
+			return
+		character.mount.unboard(exit)
+		_set_subject(character)
+		return
+	if not driving and is_instance_valid(gary) and gary.can_mount(character):
+		gary.board(character)
+		_set_subject(character)
+		return
 	if driving:
 		if player_body.linear_velocity.length() > 1.5:
 			_status("Сначала остановите автомобиль")

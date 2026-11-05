@@ -102,6 +102,28 @@ func update(delta: float, speed: float, running := false, armed := false, aim_pi
 	_animate_arm("Left", left_wave, arm_stride, aim_pitch, sighting, reloading)
 	_animate_arm("Right", right_wave, arm_stride, aim_pitch, sighting, reloading)
 
+func ride(left_grip: Vector3, right_grip: Vector3) -> void:
+	skeleton.position = base_position
+	for bone in bones: skeleton.set_bone_pose_rotation(bones[bone], neutral[bone])
+	skeleton.set_bone_pose_position(bones["Hips"], hip_position)
+	_pose("Spine", 0.18)
+	var world_to_rig := skeleton.global_transform.affine_inverse()
+	for side in ["Left", "Right"]:
+		var sign_x := 1.0 if side == "Left" else -1.0
+		var foot := hip_position + Vector3(sign_x * 0.48, -0.71, 0.23)
+		var knee := hip_position + Vector3(sign_x * 0.60, -0.18, 0.70)
+		_solve_limb(side + "UpperLeg", side + "LowerLeg", side + "Foot", foot, knee, leg_lengths[side])
+		_set_global_basis(side + "Foot", original_global[side + "Foot"].basis)
+		var grip: Vector3 = world_to_rig * (left_grip if side == "Left" else right_grip)
+		# Place the closed palm on the top of the eye.
+		var wrist := grip + Vector3(sign_x * 0.015, 0.035, -0.045)
+		_solve_arm(side, wrist, hip_position + Vector3(sign_x * 0.60, 0.12, 0.12))
+		if finger_directions.has(side):
+			_set_global_basis(side + "Hand", Basis(Quaternion(finger_directions[side], Vector3.BACK)) * original_global[side + "Hand"].basis)
+		for finger in ["Index", "Middle", "Ring", "Little"]:
+			for joint in ["Proximal", "Intermediate", "Distal"]:
+				_pose(side + finger + joint, 0.85)
+
 func _foot_target(side: String, cycle: float, stance_fraction: float, step_length: float, run_mix: float, direction: Vector3) -> Vector3:
 	var neutral_foot: Vector3 = original_global[side + "Foot"].origin
 	var in_stance := cycle < stance_fraction

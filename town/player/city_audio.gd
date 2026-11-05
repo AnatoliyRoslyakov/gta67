@@ -108,7 +108,7 @@ func _process(delta: float) -> void:
 	if reloading and not _reload_was_active: on_reload()
 	_reload_was_active = reloading
 	_foot_cooldown = maxf(0.0, _foot_cooldown - delta)
-	var grounded := player.is_on_floor()
+	var grounded := player.is_on_floor() and not is_instance_valid(player.get("mount"))
 	var speed := Vector2(player.velocity.x, player.velocity.z).length()
 	var motion: RefCounted = player.get("motion")
 	var foot_phase := floori(float(motion.get("phase")) / PI)

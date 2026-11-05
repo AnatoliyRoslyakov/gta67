@@ -36,6 +36,7 @@ var saved_collision_layer := 2
 var _step_visual_offset := 0.0
 var _hurt_cooldown := 0.0
 var _invulnerable_until_msec := 0
+var mount: CharacterBody3D
 
 func _ready() -> void:
 	collision_layer = 2
@@ -48,13 +49,12 @@ func _ready() -> void:
 	shape.shape = capsule
 	shape.position.y = 0.9
 	add_child(shape)
-	var imported := CHARACTER.instantiate()
-	skeleton = imported.get_node("GeneralSkeleton")
-	imported.remove_child(skeleton)
-	imported.free()
+	var character_scene: PackedScene = load("res://Assets/Characters/CJ/cj.glb") if ResourceLoader.exists("res://Assets/Characters/CJ/cj.glb") else CHARACTER
+	var imported := character_scene.instantiate()
 	visual = Node3D.new()
 	add_child(visual)
-	visual.add_child(skeleton)
+	visual.add_child(imported)
+	skeleton = imported.find_children("*", "Skeleton3D", true, false)[0]
 	for child in skeleton.get_children():
 		if child is MeshInstance3D and not child.visible: child.free()
 	motion.bind(skeleton)
@@ -111,6 +111,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clampf(pitch - event.relative.y * 0.0022, -1.1, 1.0)
 	if event.is_action_pressed("cycle_camera"):
 		first_person = not first_person
+	if is_instance_valid(mount): return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_Q:
 			weapon_drawn = not weapon_drawn
@@ -128,6 +129,9 @@ func _physics_process(delta: float) -> void:
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down") * delta * 1.6
 	yaw -= look.x
 	pitch = clampf(pitch - look.y, -1.1, 1.0)
+	if is_instance_valid(mount):
+		_update_riding(delta)
+		return
 	_hurt_cooldown = maxf(0.0, _hurt_cooldown - delta)
 	fire_time = maxf(0, fire_time - delta)
 	recoil = move_toward(recoil, 0, delta * 7)
@@ -185,6 +189,49 @@ func _physics_process(delta: float) -> void:
 	weapon.position = Vector3(0.16 if aiming else 0.26, -0.19 - (0.15 if reload_time > 0 else 0), -0.48 + recoil * 0.07)
 	weapon.rotation.x = -0.65 if reload_time > 0 else recoil * 0.1
 	_update_world_weapon()
+
+func mount_gary(snail: CharacterBody3D) -> void:
+	mount = snail
+	aiming = false
+	weapon_drawn = false
+	weapon.hide()
+	world_weapon.hide()
+	muzzle.light_energy = 0
+	world_muzzle.light_energy = 0
+	collision_layer = 0
+	collision_mask = 0
+	arm.add_excluded_object(snail.get_rid())
+	motion._clear_foot_locks()
+	yaw = snail.global_rotation.y + PI
+	_update_riding(0.0)
+	reset_physics_interpolation()
+
+func dismount_gary(destination: Vector3) -> void:
+	if is_instance_valid(mount): arm.remove_excluded_object(mount.get_rid())
+	mount = null
+	collision_layer = 2
+	collision_mask = 1 | 4 | 8
+	global_position = destination
+	velocity = Vector3.ZERO
+	visual.position = Vector3.ZERO
+	_step_visual_offset = 0.0
+	motion._clear_foot_locks()
+	motion.update(0, 0)
+	reset_physics_interpolation()
+
+func _update_riding(delta: float) -> void:
+	_hurt_cooldown = maxf(0, _hurt_cooldown - delta)
+	velocity = mount.velocity
+	global_position = mount.seat.global_position - Vector3.UP * motion.hip_position.y
+	visual.global_basis = mount.global_basis
+	visual.position.y = 0.0
+	visual.visible = not first_person
+	motion.ride(mount.grips[0].global_position, mount.grips[1].global_position)
+	pivot.rotation = Vector3(pitch, yaw, 0)
+	pivot.position.y = 1.62
+	arm.spring_length = 0.0 if first_person else 3.8
+	arm.position.x = 0.0
+	camera.fov = lerpf(camera.fov, 76.0, 1 - exp(-delta * 5))
 
 func _try_step_up(delta: float) -> void:
 	if not is_on_floor() or velocity.y > 0.1: return
