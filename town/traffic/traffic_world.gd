@@ -1,5 +1,7 @@
 extends Node3D
 
+signal start_bay_ready(pose: Transform3D)
+
 const Catalog = preload("res://vehicles/vehicle_catalog.gd")
 const Driver = preload("res://town/traffic/traffic_driver.gd")
 const Citizen = preload("res://town/traffic/citizen.gd")
@@ -13,7 +15,7 @@ const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle", "UAZ469"
 const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat", "BusinessMan_Suit"]
 
 @export var vehicle_count := 40
-@export var citizen_count := 64
+@export var citizen_count := 88
 var city_map: Node3D
 var subject: Node3D
 var road_cells: Dictionary = {}
@@ -27,6 +29,12 @@ var signals: Array[Node3D] = []
 var drivers: Array[RigidBody3D] = []
 var citizens: Array[CharacterBody3D] = []
 var parked_count := 0
+var _predecessors := {}
+var inbound_distance := {}
+var _flow_center := Vector3.INF
+var _entry_lanes: Array[Vector3i] = []
+var _sidewalk_entries: Array = []
+var _flow_tick := 1.25
 var _signal_second := -1
 var elapsed := 0.0
 var initialized := false
@@ -71,6 +79,15 @@ func _initialize() -> void:
 	_build_junctions()
 	_crossing_occupancy.resize(junctions.size())
 	_build_walkways()
+	_sidewalk_entries = walk_neighbors.keys()
+	for lane: Vector3i in lanes:
+		for branch in lanes[lane]:
+			if not _predecessors.has(branch): _predecessors[branch] = []
+			_predecessors[branch].append(lane)
+		var ahead: Vector2i = DIRECTIONS[lane.z]
+		var straight := Vector3i(lane.x + ahead.x, lane.y + ahead.y, lane.z)
+		if straight in lanes[lane] and not junction_cells.has(Vector2i(lane.x, lane.y)):
+			_entry_lanes.append(lane)
 	_organize_parked_cars()
 	await get_tree().physics_frame
 	await _spawn_population()
@@ -82,10 +99,15 @@ func _initialize() -> void:
 
 func _physics_process(delta: float) -> void:
 	elapsed += delta
-	var second := floori(fmod(elapsed, 58.0))
+	if initialized and is_instance_valid(subject):
+		_flow_tick -= delta
+		if _flow_tick <= 0.0:
+			_flow_tick = 0.9
+			_stream_street_population()
+	var second := floori(elapsed)
 	if second != _signal_second:
 		_signal_second = second
-		for signal_head in signals: signal_head.show_phase(second)
+		for signal_head in signals: signal_head.show_phase()
 	_driver_index_tick -= delta
 	if _driver_index_tick <= 0.0:
 		_driver_index_tick += DRIVER_INDEX_INTERVAL
@@ -145,6 +167,9 @@ func _refresh_junction(index: int) -> void:
 		_release_junction(index)
 		return
 	if _actor_in_junction(owner, index): junctions[index].entered = true
+	elif junctions[index].entered:
+		_release_junction(index)
+		return
 	# Approaching cars lose their reservation when green ends; cars already inside clear the box.
 	if not bool(junctions[index].get("entered", false)) and light_state(index, int(junctions[index].get("direction", 0))) != 2:
 		_release_junction(index)
@@ -156,7 +181,8 @@ func _extract_surfaces() -> void:
 		if mesh.mesh == null: continue
 		var n := str(mesh.name)
 		var road := n.begins_with("SM_Env_Road_")
-		for decoration in ["Lines", "Arrow", "Patch", "Median", "Parking"]:
+		# Marked road tiles replace bare asphalt on parts of the showcase map.
+		for decoration in ["Patch", "Median", "Parking"]:
 			if decoration in n: road = false
 		var walk := n.begins_with("SM_Env_Sidewalk_")
 		if not road and not walk: continue
@@ -290,10 +316,25 @@ func _closest_walk(p: Vector3, radius: float) -> Vector2i:
 func _organize_parked_cars() -> void:
 	var cars := city_map.get_node_or_null("Road_Cars")
 	if cars == null: return
+	var bay: MeshInstance3D
+	var nearest := INF
+	for candidate in cars.get_children():
+		if not candidate is MeshInstance3D or road_cells.has(world_cell(candidate.global_position)): continue
+		var distance := subject.global_position.distance_squared_to(candidate.global_position)
+		if distance < nearest:
+			bay = candidate
+			nearest = distance
+	if bay:
+		var pose := bay.global_transform.orthonormalized()
+		bay.free()
+		pose.origin += Vector3.UP * 0.35
+		start_bay_ready.emit(pose)
 	for car in cars.get_children():
 		if not car is Node3D: continue
 		if road_cells.has(world_cell(car.global_position)):
 			# The asset showcase parks display cars in active lanes; replace those with moving traffic.
+			car.free()
+		elif posmod(hash(car.global_position.round()), 3) != 0:
 			car.free()
 		else:
 			if car is MeshInstance3D: _park_car(car)
@@ -367,13 +408,18 @@ func _spawn_population() -> void:
 			await get_tree().process_frame
 	var walk_candidates: Array = walk_neighbors.keys()
 	walk_candidates.shuffle()
+	var local_streets := []
+	for cell in walk_candidates:
+		var gap := walk_position(cell).distance_squared_to(subject.global_position)
+		if gap > 6 ** 2 and gap < 45 ** 2: local_streets.append(cell)
+	walk_candidates = local_streets.slice(0, 24) + walk_candidates
 	for cell in walk_candidates:
 		if citizens.size() >= citizen_count: break
 		var p := walk_position(cell)
 		if not _spawn_clear(p, Vector3(0.6, 1.7, 0.6)): continue
 		var occupied := false
 		for person in citizens:
-			if person.position.distance_to(p) < 6: occupied = true; break
+			if person.position.distance_to(p) < 3.7: occupied = true; break
 		if occupied: continue
 		var person := Citizen.new()
 		person.world = self
@@ -387,6 +433,121 @@ func _spawn_population() -> void:
 		if pedestrian_batch == 4:
 			pedestrian_batch = 0
 			await get_tree().process_frame
+
+
+# New journeys enter from unseen streets. Keep vehicles involved in an impact,
+# nearby queues, police, and pedestrians in a conversation in their current scene.
+func _out_of_sight(point: Vector3) -> bool:
+	var camera := get_viewport().get_camera_3d()
+	if camera == null: return false
+	if point.distance_squared_to(subject.global_position) < 34 ** 2: return false
+	for height in [0.7, 2.2]:
+		var sample_point: Vector3 = point + Vector3.UP * height
+		if not camera.is_position_in_frustum(sample_point): continue
+		var ray := PhysicsRayQueryParameters3D.create(camera.global_position, sample_point, 1)
+		if subject is CollisionObject3D: ray.exclude = [subject.get_rid()]
+		if get_world_3d().direct_space_state.intersect_ray(ray).is_empty(): return false
+	return true
+
+
+# Reverse breadth-first distances route arrivals along connected roads.
+# Euclidean heading alone sends cars into parallel streets behind the block.
+func _update_arrivals(origin: Vector3) -> void:
+	if _flow_center.distance_squared_to(origin) < 18 ** 2: return
+	_flow_center = origin
+	inbound_distance.clear()
+	var queue: Array[Vector3i] = []
+	var nearest := INF
+	for lane: Vector3i in lanes: nearest = minf(nearest, origin.distance_to(lane_position(lane)))
+	for lane: Vector3i in lanes:
+		if origin.distance_to(lane_position(lane)) < nearest + 10:
+			inbound_distance[lane] = 0
+			queue.append(lane)
+	var cursor := 0
+	while cursor < queue.size():
+		var lane := queue[cursor]
+		cursor += 1
+		for previous in _predecessors.get(lane, []):
+			if inbound_distance.has(previous): continue
+			inbound_distance[previous] = int(inbound_distance[lane]) + 1
+			queue.append(previous)
+
+
+func _stream_street_population() -> void:
+	var origin := subject.global_position
+	_update_arrivals(origin)
+	var nearby := nearby_drivers(origin, 58)
+	var moving := 0
+	for car in nearby:
+		if car.speed > 1.5: moving += 1
+	var donor: RigidBody3D
+	var best_score := -INF
+	for car in drivers:
+		if car.is_in_group("police") or car.damage > 0 or car.grip_recovery > 0: continue
+		var distance := origin.distance_to(car.global_position)
+		var stalled: bool = car.stationary_time > 9 and car._plan_speed > 1.0
+		if not stalled and (distance < 85 or moving >= 7): continue
+		var score := distance + (150.0 if stalled else 0.0)
+		if score > best_score and _out_of_sight(car.global_position):
+			best_score = score
+			donor = car
+	if donor != null:
+		var best_lane := Vector3i.ZERO
+		var best := -INF
+		for attempt in 80:
+			var lane := _entry_lanes[rng.randi_range(0, _entry_lanes.size() - 1)]
+			var p := lane_position(lane)
+			var relative := origin - p
+			var distance := relative.length()
+			if distance < 35 or distance > (135 if moving >= 5 else 100): continue
+			var axis: Vector2i = DIRECTIONS[lane.z]
+			var forward := Vector3(axis.x, 0, axis.y)
+			var alignment := relative.normalized().dot(forward)
+			var straight := Vector3i(lane.x + axis.x, lane.y + axis.y, lane.z)
+			var hops := int(inbound_distance.get(straight, 999))
+			if moving < 5 and hops >= 24: continue
+			var score := rng.randf() + alignment * 0.8 - absf(distance - 65) * 0.008
+			if moving < 5: score += 0.9 - hops * 0.04
+			# Check the block downstream too. A free gap at the tail of a queue
+			# is not a useful entry lane for another vehicle.
+			for neighbor in nearby_drivers(p + forward * 18, 24):
+				if neighbor == donor: continue
+				var separation := neighbor.global_position - p
+				if absf(separation.cross(forward).y) > 3.3: continue
+				score -= 0.7 if neighbor.speed > 2.0 else 3.5
+			if score < -1.2: continue
+			if score <= best or not nearby_drivers(p, 11).is_empty() or not _out_of_sight(p): continue
+			if not _spawn_clear(p, Vector3(2.3, 1.8, 6.0), atan2(axis.x, axis.y)): continue
+			best = score
+			best_lane = lane
+		if is_finite(best):
+			for i in junctions.size():
+				if junctions[i].owner == donor: _release_junction(i)
+			donor.start_journey(best_lane, moving < 5)
+			_rebuild_driver_index()
+	var local_walkers := 0
+	var distant: CharacterBody3D
+	var farthest := 70.0 ** 2
+	for person in citizens:
+		var d := origin.distance_squared_to(person.global_position)
+		if d < 38 ** 2: local_walkers += 1
+		if d > farthest and person.health == 100 and person.can_chat() and _out_of_sight(person.global_position):
+			farthest = d
+			distant = person
+	if local_walkers >= 15 or distant == null: return
+	for attempt in 48:
+		var cell: Vector2i = _sidewalk_entries[rng.randi_range(0, _sidewalk_entries.size() - 1)]
+		var p := walk_position(cell)
+		if p.distance_squared_to(origin) > 42 ** 2 or not _out_of_sight(p): continue
+		if not _spawn_clear(p, Vector3(0.9, 1.7, 0.9)): continue
+		distant.global_position = p + Vector3.UP * 0.03
+		distant.velocity = Vector3.ZERO
+		distant.cell = cell
+		distant.previous_cell = cell
+		distant._choose_next()
+		distant.motion._clear_foot_locks()
+		distant.reset_physics_interpolation()
+		break
 
 
 func _spawn_clear(p: Vector3, dims: Vector3, yaw: float = 0.0) -> bool:
@@ -418,11 +579,28 @@ func world_cell(p: Vector3) -> Vector2i:
 func choose_lane(state: Vector3i) -> Vector3i:
 	var options: Array = lanes.get(state, [])
 	if options.is_empty(): return state
-	# Most drivers continue straight; occasional turns distribute traffic through the actual road network.
-	if rng.randf() < 0.76:
-		for next in options:
-			if next.z == state.z: return next
-	return options[rng.randi_range(0, options.size() - 1)]
+	if options.size() == 1: return options[0]
+	# Favor a continuous carriageway. A single adjacent road tile can be a
+	# median opening or a parking apron rather than a usable through street.
+	var best := -INF
+	var selected: Vector3i = options[0]
+	for candidate: Vector3i in options:
+		var axis: Vector2i = DIRECTIONS[candidate.z]
+		var step := Vector3i(axis.x, axis.y, 0)
+		var cursor := candidate
+		var continuity := 0
+		for i in 4:
+			if not lanes.has(cursor) or cursor + step not in lanes[cursor]: break
+			continuity += 1
+			cursor += step
+		var score := rng.randf_range(0.0, 2.0) + continuity * 0.85
+		if candidate.z == state.z: score += 0.8
+		for other in nearby_drivers(lane_position(candidate) + Vector3(axis.x, 0, axis.y) * 8, 7):
+			if other.speed < 1.2: score -= 1.4
+		if score > best:
+			best = score
+			selected = candidate
+	return selected
 
 
 func may_enter(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> bool:
@@ -434,8 +612,16 @@ func may_enter(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> bool:
 	var owner: Node3D = junctions[index].owner
 	if owner == actor and bool(junctions[index].get("entered", false)): return true
 	if light_state(index, to.z) != 2: return false
-	if is_instance_valid(owner) and owner != actor: return false
-	if index < _crossing_occupancy.size() and _crossing_occupancy[index] > 0: return false
+	if is_instance_valid(owner) and owner != actor:
+		var parallel: bool = posmod(int(junctions[index].direction) - to.z, 2) == 0
+		if not parallel or owner._plan_turn or actor._plan_turn: return false
+	if index < _crossing_occupancy.size() and _crossing_occupancy[index] > 0:
+		var lane_axis: Vector2i = DIRECTIONS[to.z]
+		var approach := Vector3(lane_axis.x, 0, lane_axis.y)
+		for person in citizens:
+			if person.crossing_junction != index: continue
+			var ahead := person.global_position - actor.global_position
+			if ahead.dot(approach) > 0 and ahead.dot(approach) < 14 and absf(ahead.cross(approach).y) < 2.6: return false
 	# Do not block the box: require space beyond the crossing before entry.
 	var direction: Vector2i = DIRECTIONS[to.z]
 	var exit := lane_position(to) + Vector3(direction.x, 0, direction.y) * 9
@@ -444,7 +630,8 @@ func may_enter(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> bool:
 		var relative: Vector3 = other.global_position - exit
 		var along := relative.x * direction.x + relative.z * direction.y
 		var across := absf(relative.x * direction.y - relative.z * direction.x)
-		if across < 2.2 and along > -3 and along < 8: return false
+		if other.speed < 1.2 and across < 1.8 and along > -2 and along < 5: return false
+	if is_instance_valid(owner) or actor.global_position.distance_squared_to(lane_position(to)) > 7.5 ** 2: return true
 	junctions[index].owner = actor
 	junctions[index].entered = false
 	junctions[index].direction = to.z
@@ -462,25 +649,34 @@ func approach_speed(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> float:
 		if may_enter(actor, from, entry): return INF
 		var distance := actor.global_position.distance_to(road_position(cell))
 		# Brake before the crosswalk, accounting for the vehicle's front overhang.
-		return sqrt(maxf(0, 2 * 4.0 * (distance - 8.5)))
+		return sqrt(maxf(0, 2 * 4.0 * (distance - 5.6)))
 	return INF
 
 
-func light_state(_junction: int, direction: int) -> int:
-	var phase := fmod(elapsed, 58.0)
-	var ns := direction % 2 == 0
-	if ns and phase < 11: return 2
-	if ns and phase < 13: return 1
-	if not ns and phase >= 15 and phase < 26: return 2
-	if not ns and phase >= 26 and phase < 28: return 1
+func junction_phase(index: int) -> int:
+	return posmod(floori(elapsed) + index * 7, 42)
+
+
+func walk_signal(index: int) -> bool:
+	var phase := junction_phase(index)
+	return phase >= 36 and phase < 41
+
+
+func light_state(index: int, direction: int) -> int:
+	var phase := junction_phase(index)
+	if direction % 2 == 0:
+		if phase < 15: return 2
+		if phase < 17: return 1
+	else:
+		if phase >= 18 and phase < 33: return 2
+		if phase >= 33 and phase < 35: return 1
 	return 0
 
 
 func may_cross(a: Vector2i, b: Vector2i) -> bool:
 	var index: int = crossing_edges.get(_edge_key(a, b), -1)
 	if index < 0: return true
-	var phase := fmod(elapsed, 58.0)
-	if phase < 30 or phase >= 36: return false
+	if not walk_signal(index): return false
 	var start := walk_position(a)
 	var end := walk_position(b)
 	# A person checks approaching vehicles before stepping off the curb, including

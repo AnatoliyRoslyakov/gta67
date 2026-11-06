@@ -10,6 +10,10 @@ var model_scene: PackedScene
 var model: Node3D
 var motion: RefCounted
 var idle_time := 0.0
+var chat_partner: CharacterBody3D
+var chat_time := 0.0
+var jogger := false
+var chat_cooldown := 0.0
 var crossing_junction := -1:
 	set(value):
 		if value == crossing_junction: return
@@ -50,6 +54,7 @@ func _ready() -> void:
 	motion = Motion.new()
 	motion.bind(model)
 	# Distribute bone updates across physics frames instead of updating the crowd together.
+	jogger = world.citizens.size() % 9 == 3
 	var phase_offset := float(get_instance_id() % 61) / 61.0
 	animation_elapsed = phase_offset * animation_interval
 	animation_lod_timer = phase_offset * 0.5
@@ -89,6 +94,11 @@ func _choose_next() -> void:
 
 func _physics_process(delta: float) -> void:
 	idle_time = maxf(0, idle_time - delta)
+	chat_time = maxf(0.0, chat_time - delta)
+	chat_cooldown = maxf(0.0, chat_cooldown - delta)
+	if chat_time > 0 and is_instance_valid(chat_partner):
+		var facing := chat_partner.global_position - global_position
+		rotation.y = lerp_angle(rotation.y, atan2(facing.x, facing.z), minf(delta * 5, 1))
 	flee_time = maxf(0, flee_time - delta)
 	knockdown = maxf(0, knockdown - delta)
 	_passing_time = maxf(0, _passing_time - delta)
@@ -102,7 +112,7 @@ func _physics_process(delta: float) -> void:
 	else: velocity.y = 0
 	if not is_on_floor() or not velocity.is_zero_approx(): move_and_slide()
 	var actual_speed := Vector2(velocity.x, velocity.z).length()
-	if actual_speed > 0.1: rotation.y = lerp_angle(rotation.y, atan2(_walk_direction.x, _walk_direction.z), minf(delta * 6, 1))
+	if actual_speed > 0.1 and chat_time <= 0.0: rotation.y = lerp_angle(rotation.y, atan2(_walk_direction.x, _walk_direction.z), minf(delta * 6, 1))
 	_update_animation(delta, actual_speed)
 	model.rotation.z = lerpf(model.rotation.z, 1.4 if knockdown > 0 or health <= 0 else 0.0, minf(delta * 6, 1))
 	if actual_speed < 0.1 and (_can_walk or _obstructed) and health > 0 and knockdown <= 0:
@@ -126,12 +136,12 @@ func _plan_walk() -> void:
 		_choose_next()
 		target = world.walk_position(target_cell)
 		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
-	_can_walk = idle_time <= 0 and knockdown <= 0 and health > 0
+	_can_walk = chat_time <= 0 and idle_time <= 0 and knockdown <= 0 and health > 0
 	if crossing_junction < 0 and _crossing_target >= 0:
 		if not world.may_cross(cell, target_cell): _can_walk = false
 		elif _can_walk: crossing_junction = _crossing_target
 	_walk_direction = offset.normalized()
-	_desired_speed = walk_speed * (2.6 if flee_time > 0 else 1.0)
+	_desired_speed = walk_speed * (2.6 if flee_time > 0 else (2.15 if jogger else 1.0))
 	if _can_walk:
 		var stopping_distance := _desired_speed * _desired_speed / 12.0 + _desired_speed / 12.0 + 0.35
 		_obstacle_ray.from = global_position + Vector3.UP
@@ -176,16 +186,30 @@ func _update_animation(delta: float, actual_speed: float) -> void:
 		animation_elapsed = 0.0
 		return
 	# The idle pose has no advancing gait; avoid resolving all four IK chains again.
-	if actual_speed < 0.01 and float(motion.get("blend")) <= 0.001:
+	if actual_speed < 0.01 and chat_time <= 0.0 and float(motion.get("blend")) <= 0.001:
 		animation_elapsed = 0.0
 		return
 	if animation_elapsed + 0.000001 < animation_interval: return
 	# Pass all elapsed time so gait speed and blend timing stay the same at every LOD.
-	motion.update(animation_elapsed, actual_speed, flee_time > 0)
+	motion.update(animation_elapsed, actual_speed, flee_time > 0 or jogger)
+	if chat_time > 0.15:
+		motion.gesture(chat_time + float(get_instance_id() % 3))
 	animation_elapsed = 0.0
 
 
+func can_chat() -> bool:
+	return health > 0 and knockdown <= 0 and flee_time <= 0 and crossing_junction < 0 and _crossing_target < 0 and chat_cooldown <= 0
+
+
+func greet(other: CharacterBody3D, duration: float) -> void:
+	chat_partner = other
+	chat_time = duration
+	chat_cooldown = 32.0
+	_sensor_tick = 0.0
+
+
 func flee(origin: Vector3) -> void:
+	chat_time = 0.0
 	fear_origin = origin
 	flee_time = 8
 	if crossing_junction < 0: _choose_next()
@@ -193,6 +217,7 @@ func flee(origin: Vector3) -> void:
 
 func receive_hit(amount: float, direction: Vector3) -> void:
 	health = maxf(0, health - amount)
+	chat_time = 0.0
 	knockdown = 4
 	_sensor_tick = 0.0
 	velocity += direction * 2

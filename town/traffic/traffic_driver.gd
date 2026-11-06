@@ -34,6 +34,10 @@ var turn_lights: Array[MeshInstance3D] = []
 var damage := 0.0
 var wheel_distance := 0.0
 var _fixed_obstruction := false
+var _reverse_time := 0.0
+var _maneuver_cooldown := 0.0
+var inbound := false
+var stationary_time := 0.0
 var blocked_seconds := 0.0
 var queue_release_delay := 0.0
 var _traffic_sensor_tick := 0.0
@@ -94,10 +98,22 @@ func _ready() -> void:
 			part.reparent(pivot, false)
 			part.transform = Transform3D(original.basis, original.origin - center)
 			wheel_visuals.append({"pivot": pivot, "mesh": part, "radius": radius, "front": front})
-	# Put the hull underside at tire height so the visual wheels meet the street.
-	collider.position.y = (tire_floor if is_finite(tire_floor) else 0.0) + shape.size.y * 0.5
+	# Support the car on rounded tire contacts. A flat hull resting directly
+	# on the asphalt catches the vertical edges of manholes and road tiles.
+	var floor_y := tire_floor if is_finite(tire_floor) else 0.0
+	var clearance := 0.22
+	shape.size.y -= clearance
+	collider.position.y = floor_y + clearance + shape.size.y * 0.5
+	var tire := SphereShape3D.new()
+	tire.radius = clampf(wheelbase * 0.15, 0.31, 0.43)
+	for side in [-1, 1]:
+		for axle in [-1, 1]:
+			var contact := CollisionShape3D.new()
+			contact.shape = tire
+			contact.position = Vector3(collider.position.x + side * (shape.size.x * 0.5 - tire.radius * 0.7), floor_y + tire.radius, collider.position.z + axle * wheelbase * 0.5)
+			add_child(contact)
 	next_state = world.choose_lane(state)
-	following_state = world.choose_lane(next_state)
+	following_state = _following_lane(next_state)
 	var direction: Vector3 = world.lane_position(next_state) - position
 	rotation.y = atan2(direction.x, direction.z)
 	var body_mesh := model as MeshInstance3D
@@ -155,16 +171,17 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	stationary_time = stationary_time + delta if speed < 0.6 else 0.0
 	if _reached_lane(following_state):
 		state = next_state
 		next_state = following_state
-		following_state = world.choose_lane(next_state)
+		following_state = _following_lane(next_state)
 		_traffic_sensor_tick = 0.0
 	_traffic_sensor_tick -= delta
 	if _traffic_sensor_tick <= 0.0:
 		_traffic_sensor_tick += 0.05
 		var target := _driving_target(following_state)
-		var direction := (target - global_position).normalized()
+		var direction := global_basis.z.slide(Vector3.UP).normalized().slerp((target - global_position).slide(Vector3.UP).normalized(), 0.35)
 		var desired := cruise_speed
 		if following_state == next_state:
 			desired = minf(desired, sqrt(maxf(0, 6.0 * (global_position.distance_to(world.lane_position(next_state)) - 1.0))))
@@ -194,6 +211,13 @@ func _physics_process(delta: float) -> void:
 		queue_release_delay -= delta
 		desired = 0.0
 	if damage > 70: desired = 0
+	_maneuver_cooldown = maxf(0, _maneuver_cooldown - delta)
+	if stationary_time > 2.8 and _plan_speed > 1.0 and _maneuver_cooldown <= 0 and damage < 70:
+		var forward := global_basis.z.slide(Vector3.UP).normalized()
+		var toward := (_plan_target - global_position).slide(Vector3.UP).normalized()
+		if (forward.dot(toward) < 0.75 or _fixed_obstruction) and _rear_clear():
+			_reverse_time = 1.55
+		_maneuver_cooldown = 4.0
 	var braking := _drive_toward(_plan_target, desired, delta)
 	_traffic_visual_elapsed += delta
 	if _traffic_visual_elapsed + 0.000001 >= _traffic_visual_interval:
@@ -218,6 +242,49 @@ func _physics_process(delta: float) -> void:
 			(turn_lights[i].material_override as StandardMaterial3D).emission_energy_multiplier = 2.0 if lit else 0.0
 
 
+func _rear_clear() -> bool:
+	var back := -global_basis.z.slide(Vector3.UP).normalized()
+	for i in 3:
+		var ray := _traffic_ray if i == 1 else _side_rays[0 if i == 0 else 1]
+		ray.from = global_position + Vector3.UP * 0.75 + global_basis.x * (i - 1) * body_bounds.size.x * 0.39
+		ray.to = ray.from + back * (body_bounds.size.z * 0.5 + 2.6)
+		if not get_world_3d().direct_space_state.intersect_ray(ray).is_empty(): return false
+	return true
+
+
+func _following_lane(lane: Vector3i) -> Vector3i:
+	if inbound:
+		var distance := int(world.inbound_distance.get(lane, 0))
+		if distance > 0:
+			for branch in world.lanes.get(lane, []):
+				if int(world.inbound_distance.get(branch, distance)) < distance: return branch
+		inbound = false
+	return world.choose_lane(lane)
+
+
+func start_journey(lane: Vector3i, approach_player: bool) -> void:
+	state = lane
+	inbound = approach_player
+	var axis: Vector2i = world.DIRECTIONS[state.z]
+	next_state = Vector3i(state.x + axis.x, state.y + axis.y, state.z)
+	following_state = _following_lane(next_state)
+	var p: Vector3 = world.lane_position(state)
+	var heading: Vector3 = (world.lane_position(next_state) - p).normalized()
+	global_transform = Transform3D(Basis.looking_at(heading, Vector3.UP, true), p + Vector3.UP * 0.05)
+	linear_velocity = heading * minf(4.5, cruise_speed)
+	angular_velocity = Vector3.ZERO
+	sleeping = false
+	steering_angle = 0.0
+	_reverse_time = 0.0
+	_maneuver_cooldown = 0.0
+	stationary_time = 0.0
+	blocked_seconds = 0.0
+	queue_release_delay = 0.0
+	_traffic_sensor_tick = 0.0
+	_turn_points.clear()
+	reset_physics_interpolation()
+
+
 func _is_turn(following: Vector3i) -> bool:
 	var incoming: Vector3 = world.lane_position(next_state) - world.lane_position(state)
 	var outgoing: Vector3 = world.lane_position(following) - world.lane_position(next_state)
@@ -232,12 +299,12 @@ func _reached_lane(following: Vector3i) -> bool:
 		var incoming: Vector3 = (corner - world.lane_position(state)).normalized()
 		return offset.length() < 0.8 or offset.dot(incoming) > 0.0
 	var outgoing: Vector3 = (world.lane_position(following) - corner).normalized()
-	return offset.dot(outgoing) > 1.5 and global_basis.z.dot(outgoing) > 0.8
+	return offset.dot(outgoing) > 1.4 and global_basis.z.dot(outgoing) > 0.45
 
 
 func _driving_target(following: Vector3i) -> Vector3:
 	var corner: Vector3 = world.lane_position(next_state)
-	if not _is_turn(following): return corner
+	if not _is_turn(following): return corner + (world.lane_position(following) - corner).limit_length(3.5)
 	if _turn_key != next_state or _turn_points.is_empty():
 		_turn_key = next_state
 		_turn_points.clear()
@@ -269,7 +336,13 @@ func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
 	var error := angle_difference(rotation.y, atan2(offset.x, offset.z))
 	var requested := clampf(atan2(2.0 * wheelbase * sin(error), maxf(offset.length(), 1.0)), -1.2, 1.2)
 	if absf(error) > PI * 0.7: requested = signf(error) * 1.05
-	steering_angle = move_toward(steering_angle, requested, delta * 1.8)
+	if _reverse_time > 0.0:
+		_reverse_time = maxf(0, _reverse_time - delta)
+		if Engine.get_physics_frames() % 8 == 0 and not _rear_clear(): _reverse_time = 0.0
+		if _reverse_time > 0.0:
+			desired = -1.65
+			requested = -clampf(error * 1.8, -0.95, 0.95)
+	steering_angle = move_toward(steering_angle, requested, delta * 2.3)
 	# Bicycle steering: the velocity and body share a heading, including in turns.
 	var curvature := absf(tan(steering_angle) / wheelbase)
 	desired = minf(desired, sqrt(2.8 / maxf(curvature, 0.01)))
@@ -320,7 +393,7 @@ func _try_open_branch() -> void:
 		if _sense_obstacles(toward.normalized(), 7.0) < 2.0: continue
 		if not world.may_enter(self, state, branch): continue
 		next_state = branch
-		following_state = world.choose_lane(next_state)
+		following_state = _following_lane(next_state)
 		_traffic_sensor_tick = 0.0
 		_turn_points.clear()
 		return
@@ -332,16 +405,6 @@ func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 	var origin := global_position
 	# Braking gaps include travel between sensor samples; collision movement still runs at every physics tick.
 	var reaction_margin := maxf(speed, cruise_speed) * 0.05
-	for other in world.nearby_drivers(origin, lookahead + 3.0):
-		if other == self: continue
-		var relative: Vector3 = other.global_position - origin
-		var ahead := relative.dot(direction)
-		var lateral := absf(relative.x * direction.z - relative.z * direction.x)
-		var lead_speed := maxf(0.0, other.linear_velocity.dot(direction))
-		if ahead > 0 and ahead < lookahead and lateral < 2.1:
-			var gap: float = ahead - 0.5 * (body_bounds.size.z + other.body_bounds.size.z)
-			var desired_gap := 2.0 + speed * following_time + reaction_margin
-			limit = minf(limit, maxf(0, lead_speed + (gap - desired_gap) / following_time))
 	for i in 3:
 		var ray := _traffic_ray if i == 1 else _side_rays[0 if i == 0 else 1]
 		ray.from = origin + Vector3.UP + global_basis.x * ((i - 1) * body_bounds.size.x * 0.35)
@@ -353,7 +416,10 @@ func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 			if gap < body_bounds.size.z * 0.5 + 3.0 and (hit.collider is StaticBody3D or hit.collider.is_in_group("parked_vehicles")):
 				_fixed_obstruction = true
 			var moving_speed := maxf(0.0, obstacle.linear_velocity.dot(direction)) if obstacle else 0.0
-			var room := maxf(0.0, gap - body_bounds.size.z * 0.5 - 1.6 - reaction_margin)
+			var bumper_gap := gap - body_bounds.size.z * 0.5
+			if obstacle and obstacle.global_basis.z.dot(direction) > 0.8:
+				limit = minf(limit, maxf(0, moving_speed + (bumper_gap - 0.9 - reaction_margin) / following_time))
+			var room := maxf(0.0, bumper_gap - 0.75 - reaction_margin)
 			limit = minf(limit, sqrt(moving_speed * moving_speed + 7.0 * room))
 	return limit
 

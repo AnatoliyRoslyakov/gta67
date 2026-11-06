@@ -76,6 +76,7 @@ func _ready() -> void:
 	if ResourceLoader.exists("res://town/traffic/traffic_world.gd"):
 		traffic = load("res://town/traffic/traffic_world.gd").new()
 		add_child(traffic)
+		traffic.start_bay_ready.connect(_park_at_start)
 		traffic.configure($CityMap, player_body)
 	gameplay = CityExperience.new()
 	add_child(gameplay)
@@ -84,13 +85,24 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_spawn_gary.call_deferred()
 
+func _park_at_start(pose: Transform3D) -> void:
+	spawn_transform = pose
+	player_body.global_transform = pose
+	player_body.linear_velocity = Vector3.ZERO
+	player_body.angular_velocity = Vector3.ZERO
+	player_body.reset_physics_interpolation()
+	player_body.get_node("CameraBase/Camera3D").update_camera()
+
+
 func _spawn_gary() -> void:
 	if not ResourceLoader.exists("res://Assets/Characters/Gary/gary.glb"): return
 	while CityPerformance.loading: await get_tree().process_frame
 	await get_tree().physics_frame
 	var space := get_world_3d().direct_space_state
-	for offset in [Vector3(4, 0, 0), Vector3(-4, 0, 0), Vector3(0, 0, -5)]:
+	var offsets := [Vector3(3.2,0,0), Vector3(-3.2,0,0), Vector3(0,0,-4.5), Vector3(0,0,4.5), Vector3(3,0,3), Vector3(-3,0,-3)]
+	for offset in offsets:
 		var point: Vector3 = player_body.global_transform * offset
+		if traffic.road_cells.has(traffic.world_cell(point)): continue
 		var ground := space.intersect_ray(PhysicsRayQueryParameters3D.create(point + Vector3.UP * 3, point - Vector3.UP * 4, 1, [player_body.get_rid()]))
 		if ground.is_empty() or ground.normal.y < 0.8: continue
 		point = ground.position + Vector3.UP * 0.08

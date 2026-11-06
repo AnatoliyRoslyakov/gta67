@@ -4,7 +4,7 @@ Godot 4.7 city sandbox based on POLYGON City and the Truck Town vehicle controll
 
 Open `project.godot` and press F5 to launch the vehicle selector. Nine vehicle choices have individually fitted wheels, suspension and cabin cameras. Leave the car to walk, run, jump and use a pistol in first or third person.
 
-The city has 40 civilian cars, 64 pedestrians, parked cars, seven signal-controlled junctions and 24 crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. Civilian traffic uses fixed phases without lane changes. Cars steer through rounded corners with a speed-dependent bicycle model, brake before turns and maintain gaps based on vehicle length. Seven civilian model types spawn in shuffled batches with varied paint tints, acceleration, cruising speed and following distance; each session randomizes routing. Model-sized colliders and three obstacle rays cover the car body, while dead-end lane branches are removed from the driving network. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
+The city has 40 civilian cars, 88 pedestrians, parked cars and ten signal-controlled junctions with pedestrian crossings. Routes follow the actual road and sidewalk geometry. Traffic keeps right, brakes for obstructions and waits for signals; pedestrians use a protected crossing phase. Signals are staggered between blocks. Offscreen traffic enters along connected streets, and drivers favor exits with room ahead. Cars steer through rounded corners with a speed-dependent bicycle model, brake before turns and maintain gaps based on vehicle length. Seven civilian model types spawn in shuffled batches with varied paint tints, acceleration, cruising speed and following distance; each session randomizes routing. Model-sized colliders and three obstacle rays cover the car body, while dead-end lane branches are removed from the driving network. Signal and crossing behavior is based on [Florida 316.075](https://www.flsenate.gov/Laws/Statutes/2026/0316.075) and [316.130](https://www.flsenate.gov/Laws/Statutes/2026/0316.130).
 
 A full day lasts 30 minutes: warm sunlight, long shadows, distant haze, street lamps, neon and nighttime reflections change with the clock. Nearby lights and pedestrian animation updates use distance budgets. The HUD shows the local street map, GPS route, objective, patrol positions, cash, wanted stars, clock, speed, vehicle condition and ammunition.
 
@@ -52,7 +52,7 @@ Check out this demo on the Asset Store: https://store.godotengine.org/asset/godo
 
 ## How does it work?
 
-The player car uses `VehicleBody3D` with model-specific wheel centers and suspension. Citizens and traffic use `CharacterBody3D`; their routes are derived from the imported map at runtime. Character poses are procedural because the supplied character clips contain only static keys. All material, light and rig changes are applied at runtime without editing the purchased source files.
+The player car uses `VehicleBody3D` with model-specific wheel centers and suspension. Citizens use `CharacterBody3D` and traffic uses `RigidBody3D`; their routes are derived from the imported map at runtime. Character poses are procedural because the supplied character clips contain only static keys. All material, light and rig changes are applied at runtime without editing the purchased source files.
 
 ## Credits
 

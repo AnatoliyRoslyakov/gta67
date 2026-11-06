@@ -54,17 +54,17 @@ func _ready() -> void:
 		head.add_child(sign)
 		pedestrian_labels.append(sign)
 
-	show_phase(floori(fmod(world.elapsed, 58.0)))
+	show_phase()
 
 
-func show_phase(second: int) -> void:
+func show_phase() -> void:
 	for direction in 4:
 		var active: int = world.light_state(junction_index, direction)
 		if active == _last_light_states[direction]: continue
 		_last_light_states[direction] = active
 		for i in 3:
 			lamps[direction][i].material_override = lens_finishes[i * 2 + int(active == i)]
-	var walk := second >= 30 and second < 36
+	var walk: bool = world.walk_signal(junction_index)
 	if int(walk) == _last_walk_state: return
 	_last_walk_state = int(walk)
 	for sign in pedestrian_labels:

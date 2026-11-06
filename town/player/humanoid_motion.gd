@@ -191,6 +191,11 @@ func _animate_arm(side: String, leg_wave: float, stride: float, aim_pitch: float
 		var desired_direction := Vector3(0.0, -1.0, 0.12).normalized().slerp(aim_basis * Vector3.BACK, weapon_blend)
 		_set_global_basis(hand, Basis(Quaternion(authored_direction, desired_direction)) * original_global[hand].basis)
 
+func gesture(time: float) -> void:
+	var beat := sin(time * 4.5)
+	_solve_arm("Right", Vector3(-0.29 - beat * 0.045, 1.12 + beat * 0.1, 0.29), Vector3(-0.46, 1.0, 0.08))
+
+
 func _solve_arm(side: String, target: Vector3, pole: Vector3) -> void:
 	_solve_limb(side + "UpperArm", side + "LowerArm", side + "Hand", target, pole, limb_lengths[side])
 

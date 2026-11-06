@@ -8,7 +8,10 @@ const PROPS = [
 	preload("res://Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_TrashBag_02.tscn")
 ]
 var world: Node3D
-var motor: AudioStreamPlayer3D
+var motors: Array[AudioStreamPlayer3D] = []
+var motor_cars: Array[RigidBody3D] = []
+var footsteps: AudioStreamPlayer3D
+var foot_wait := 0.0
 var horn: AudioStreamPlayer3D
 var speech: AudioStreamPlayer3D
 var paper := CPUParticles3D.new()
@@ -22,10 +25,14 @@ var last_pair := -1
 
 func _ready() -> void:
 	world = get_parent()
-	motor = _voice(30, -18)
-	motor.stream = ENGINE
-	horn = _voice(32, -13)
-	speech = _voice(16, -9)
+	for i in 3:
+		var motor := _voice(52, -12)
+		motor.stream = ENGINE
+		motors.append(motor)
+		motor_cars.append(null)
+	horn = _voice(48, -9)
+	speech = _voice(23, -3)
+	footsteps = _voice(8, -9)
 	for i in 6:
 		lines.append(load("res://town/sound/street_line_%d.wav" % i))
 	_make_paper()
@@ -44,7 +51,8 @@ func _ready() -> void:
 func _voice(radius: float, gain: float) -> AudioStreamPlayer3D:
 	var voice := AudioStreamPlayer3D.new()
 	voice.max_distance = radius
-	voice.unit_size = 4
+	voice.unit_size = 8
+	voice.bus = &"Ambient"
 	voice.volume_db = gain
 	add_child(voice)
 	return voice
@@ -78,6 +86,7 @@ func _process(delta: float) -> void:
 	timer -= delta
 	horn_wait -= delta
 	chat_wait -= delta
+	foot_wait -= delta
 	if timer > 0 or not is_instance_valid(world.subject): return
 	timer = 0.25
 	var origin: Vector3 = world.subject.global_position
@@ -86,46 +95,73 @@ func _process(delta: float) -> void:
 	if paper.amount != budget:
 		paper.amount = budget
 		paper.fixed_fps = 12 if CityPerformance.quality == 0 else 20
-	var closest: RigidBody3D
-	var best := 900.0
-	for car in world.nearby_drivers(origin, 32.0):
-		var d: float = origin.distance_squared_to(car.global_position)
-		if d < best and car.speed > 1.0:
-			closest = car
-			best = d
-		if d < 900 and horn_wait <= 0 and car.blocked_seconds > 3.5:
+	var nearby: Array = world.nearby_drivers(origin, 52.0)
+	nearby.sort_custom(func(a, b): return a.global_position.distance_squared_to(origin) < b.global_position.distance_squared_to(origin))
+	var selected := nearby.slice(0, motors.size())
+	for i in motors.size():
+		if is_instance_valid(motor_cars[i]) and motor_cars[i] in selected: continue
+		motor_cars[i] = null
+		motors[i].stop()
+	for car in selected:
+		var i := motor_cars.find(car)
+		if i < 0:
+			i = motor_cars.find(null)
+			motor_cars[i] = car
+		var motor := motors[i]
+		motor.global_position = car.global_position
+		motor.pitch_scale = 0.68 + minf(car.speed, 16) * 0.052
+		motor.volume_db = lerpf(-17.0, -7.0, minf(car.speed / 9.0, 1.0))
+		if not motor.playing: motor.play(i * 0.11)
+		if horn_wait <= 0 and car.blocked_seconds > 1.7 and car.global_position.distance_squared_to(origin) < 38 ** 2:
 			horn.global_position = car.global_position
 			horn.stream = HORNS.pick_random()
-			horn.pitch_scale = randf_range(0.93,1.08)
+			horn.pitch_scale = randf_range(0.92, 1.12)
 			horn.play()
-			horn_wait = randf_range(9,16)
-	if closest:
-		motor.global_position = closest.global_position
-		motor.pitch_scale = 0.74 + minf(closest.speed,16) * 0.045
-		if not motor.playing: motor.play()
-	elif motor.playing: motor.stop()
+			horn_wait = randf_range(5, 10)
+	if foot_wait <= 0:
+		var nearest: CharacterBody3D
+		var radius := 8.0 ** 2
+		for person in world.citizens:
+			var distance: float = person.global_position.distance_squared_to(origin)
+			if distance < radius and person.velocity.length_squared() > 0.6 and person.is_on_floor():
+				radius = distance
+				nearest = person
+		if nearest:
+			footsteps.global_position = nearest.global_position
+			footsteps.stream = preload("res://town/player/city_audio.gd").STEPS.pick_random()
+			footsteps.pitch_scale = randf_range(0.88, 1.08)
+			footsteps.play()
+		foot_wait = 0.42
 	if chat_wait <= 0 and not speech.playing: _conversation(origin)
+
 
 func _conversation(origin: Vector3) -> void:
 	if is_instance_valid(reply_from):
-		if origin.distance_squared_to(reply_from.global_position) < 225:
+		if reply_from.chat_time > 0 and origin.distance_squared_to(reply_from.global_position) < 23 ** 2:
 			_speak(reply_from, reply_line)
 		reply_from = null
-		chat_wait = randf_range(10,20)
+		chat_wait = randf_range(3.5,7.0)
 		return
 	chat_wait = 2
-	var first: CharacterBody3D
+	var listeners: Array[CharacterBody3D] = []
 	for person in world.citizens:
-		if origin.distance_squared_to(person.global_position) > 144 or person.velocity.length() > 2.2: continue
-		if not first:
-			first = person
-		elif first.global_position.distance_squared_to(person.global_position) < 25:
-			last_pair = (last_pair + randi_range(1,2)) % 3
-			_speak(first, last_pair * 2)
-			reply_from = person
+		if origin.distance_squared_to(person.global_position) > 21 ** 2 or not person.can_chat(): continue
+		for first in listeners:
+			var separation := first.global_position.distance_squared_to(person.global_position)
+			if separation < 1 or separation > 4.8 ** 2: continue
+			var ray := PhysicsRayQueryParameters3D.create(first.global_position + Vector3.UP, person.global_position + Vector3.UP, 1 | 4)
+			if not get_world_3d().direct_space_state.intersect_ray(ray).is_empty(): continue
+			last_pair = (last_pair + randi_range(1, 2)) % 3
 			reply_line = last_pair * 2 + 1
-			chat_wait = lines[last_pair * 2].get_length() + 0.35
+			var duration := lines[reply_line - 1].get_length() + lines[reply_line].get_length() + 1.1
+			first.greet(person, duration)
+			person.greet(first, duration)
+			_speak(first, reply_line - 1)
+			reply_from = person
+			chat_wait = lines[reply_line - 1].get_length() + 0.35
 			return
+		listeners.append(person)
+
 
 func _speak(person: Node3D, line: int) -> void:
 	speech.global_position = person.global_position + Vector3.UP * 1.5

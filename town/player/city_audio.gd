@@ -90,7 +90,7 @@ func _process(delta: float) -> void:
 		elif _hour >= 16.5 and _hour < 20.0: mood = 2
 		for index in ambience.size():
 			var voice := ambience[index]
-			var target := 0.06 if index == mood else 0.0
+			var target := 0.16 if index == mood else 0.0
 			if target == 0.0 and not voice.playing: continue
 			voice.volume_linear = lerpf(voice.volume_linear, target, 1.0 - exp(-_mix_elapsed * 1.4))
 			if target > 0 and not voice.playing: voice.play()
