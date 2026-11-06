@@ -372,9 +372,16 @@ func _park_car(car: MeshInstance3D) -> void:
 
 
 func _spawn_population() -> void:
+	await _spawn_drivers()
+	await _spawn_walkers()
+
+
+func _spawn_drivers() -> void:
 	# Keep the loading overlay responsive while models, colliders and rigs enter the tree.
 	var car_batch := 0
-	var pedestrian_batch := 0
+	var palette := ["c04e41","43856c","e1dbca","b86d37","783b60","5399ac","50545c","888fbc","a0af68"]
+	var colors := palette.duplicate()
+	colors.shuffle()
 	var model_bag: Array = []
 	var candidates: Array = lanes.keys()
 	candidates.shuffle()
@@ -396,7 +403,10 @@ func _spawn_population() -> void:
 		var vehicle_kind: String = model_bag.pop_back()
 		actor.model_scene = load(Catalog.model_path(vehicle_kind))
 		if vehicle_kind != "Taxi" and vehicle_kind not in Catalog.RUSSIAN_KINDS:
-			actor.paint_tint = Color.from_hsv(rng.randf(), rng.randf_range(0.0, 0.3), rng.randf_range(0.65, 1.0))
+			actor.paint_tint = Color(colors.pop_back())
+			if colors.is_empty():
+				colors = palette.duplicate()
+				colors.shuffle()
 		actor.acceleration = rng.randf_range(1.3, 2.5)
 		actor.following_time = rng.randf_range(1.5, 2.1)
 		actor.cruise_speed = rng.randf_range(6.5, 10.5) * (0.85 if vehicle_kind in ["Van", "UAZ469"] else 1.0)
@@ -407,6 +417,10 @@ func _spawn_population() -> void:
 		if car_batch == 2:
 			car_batch = 0
 			await get_tree().process_frame
+
+
+func _spawn_walkers() -> void:
+	var pedestrian_batch := 0
 	var walk_candidates: Array = walk_neighbors.keys()
 	walk_candidates.shuffle()
 	var local_streets := []

@@ -3,6 +3,7 @@ extends "res://cube/geometry.gd"
 const District = preload("res://Assets/WebQuarter/district.scn")
 const Traffic = preload("res://cube/traffic.gd")
 const Glass = preload("res://cube/glass.gdshader")
+const SnailRider = preload("res://cube/snail_rider.gd")
 var camera := Camera3D.new()
 var yaw := -0.48
 var pitch := 0.57
@@ -27,6 +28,10 @@ var sun := DirectionalLight3D.new()
 var room_lights: Array[StandardMaterial3D] = []
 var street_lights: Array[OmniLight3D] = []
 var selected_time := "day"
+var walker: CharacterBody3D
+var move_input := Vector2.ZERO
+var saved_view := {}
+var follow_distance := 6.8
 var transition: Tween
 # Sun angle, sunlight, skylight, energy, window light and gallery backdrop.
 const TIMES := {
@@ -85,6 +90,7 @@ func _ready() -> void:
 	camera.make_current()
 	camera_pose()
 	while not traffic.initialized: await get_tree().process_frame
+	traffic.spawn_snail()
 	if OS.has_feature("web"):
 		bridge = JavaScriptBridge.get_interface("quarterUI")
 		callback = JavaScriptBridge.create_callback(web_command)
@@ -131,14 +137,17 @@ func case_glass() -> void:
 func orbit(delta: Vector2) -> void:
 	set_spin(false)
 	yaw -= delta.x*.006
-	pitch = clampf(pitch+delta.y*.005,-.85,1.47)
+	pitch = clampf(pitch+delta.y*.005,.15 if walker else -.85,1.47)
 
 func set_spin(on: bool) -> void:
 	rotating = on
 	if bridge: bridge.spinChanged(on)
 
 func set_zoom(multiplier: float) -> void:
-	zoom_target = clampf(zoom_target*multiplier,.12,1.32)
+	if walker:
+		follow_distance = clampf(follow_distance*multiplier,3.2,13)
+	else:
+		zoom_target = clampf(zoom_target*multiplier,.12,1.32)
 
 func is_night() -> bool:
 	return selected_time=="night" or selected_time=="evening"
@@ -165,15 +174,68 @@ func change_time(key: String) -> void:
 		for lamp in street_lights: lamp.visible=is_night()
 	)
 
+func toggle_walker() -> void:
+	if not traffic.initialized: return
+	move_input = Vector2.ZERO
+	if walker:
+		walker.set_possessed(false)
+		walker = null
+		camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		yaw = saved_view.yaw
+		pitch = saved_view.pitch
+		zoom_target = saved_view.zoom
+		set_spin(saved_view.spin)
+	else:
+		var best := INF
+		for person in traffic.citizens:
+			if person is SnailRider or person.health <= 0: continue
+			var p := person.global_position + Vector3.UP
+			var score := p.distance_squared_to(observer.position)
+			if not camera.is_position_in_frustum(p): score += 20000
+			var sight := PhysicsRayQueryParameters3D.create(camera.position,p,1)
+			if not get_world_3d().direct_space_state.intersect_ray(sight).is_empty(): score += 10000
+			if score < best:
+				walker = person
+				best = score
+		if not walker: return
+		saved_view = {"yaw":yaw,"pitch":pitch,"zoom":zoom_target,"spin":rotating}
+		walker.set_possessed(true)
+		set_spin(false)
+		pitch = .48
+		follow_distance = 6.8
+		camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+		camera.fov = 58
+	if bridge: bridge.walkChanged(walker != null)
+	camera_pose()
+
+func _physics_process(_delta: float) -> void:
+	if not walker: return
+	var direction := move_input
+	if not OS.has_feature("web"):
+		direction += Vector2(int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A)),int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W)))
+	var ground_dir := Vector3(direction.x,0,direction.y).limit_length(1.0)
+	walker.player_direction = ground_dir.rotated(Vector3.UP,yaw)
+
+func reset_traffic() -> void:
+	if traffic.restarting or not traffic.initialized: return
+	if bridge: bridge.trafficBusy(true)
+	await traffic.restart_cars()
+	if bridge: bridge.trafficBusy(false)
+
 func web_command(args: Array) -> void:
 	if TIMES.has(str(args[0])):
 		change_time(str(args[0]))
 		return
 	match str(args[0]):
+		"walk": toggle_walker()
+		"traffic": reset_traffic()
+		"move":
+			if args.size() == 3: move_input = Vector2(float(args[1]),float(args[2])).limit_length(1)
 		"in": set_zoom(.84)
 		"out": set_zoom(1.19)
 		"spin": set_spin(not rotating)
 		"reset":
+			if walker: toggle_walker()
 			yaw=-.48
 			pitch=.57
 			zoom_target=1
@@ -184,7 +246,7 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseButton:
 		if e.button_index==MOUSE_BUTTON_LEFT:
 			dragging=e.pressed
-			if e.pressed and e.double_click:
+			if not walker and e.pressed and e.double_click:
 				var ground = Plane(Vector3.UP,0).intersects_ray(camera.project_ray_origin(e.position),camera.project_ray_normal(e.position))
 				if ground != null:
 					inspect_offset=Vector2(clampf(ground.x,-47,47),clampf(ground.z,-47,47))
@@ -218,6 +280,19 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_HOME: web_command(["reset"])
 
 func camera_pose() -> void:
+	if walker:
+		var head := walker.global_position + Vector3.UP*1.25
+		var arm := Vector3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch))
+		var to := head + arm*follow_distance
+		var ray := PhysicsRayQueryParameters3D.create(head,to,1)
+		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
+		if not hit.is_empty(): to = hit.position-arm*.18
+		camera.position = to
+		camera.look_at(head)
+		observer.position = head
+		pane.hide()
+		seams.hide()
+		return
 	var aspect := get_viewport().get_visible_rect().size.aspect()
 	camera.size = 168 * zoom_factor / minf(aspect,1.0)
 	var focus := Vector3(0,lerpf(2.2,40.1,minf(zoom_factor,1.0)),0)

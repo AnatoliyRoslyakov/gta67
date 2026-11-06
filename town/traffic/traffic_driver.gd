@@ -121,10 +121,10 @@ func _ready() -> void:
 	for surface in body_mesh.mesh.get_surface_count():
 		var source := body_mesh.get_active_material(surface) as StandardMaterial3D
 		if source != null and paint_tint != Color.WHITE:
-			var finish := source.duplicate() as StandardMaterial3D
-			finish.albedo_color *= paint_tint
-			finish.metallic = 0.15
-			finish.roughness = 0.4
+			var finish := ShaderMaterial.new()
+			finish.shader = preload("res://town/traffic/body_paint.gdshader")
+			finish.set_shader_parameter("atlas",source.albedo_texture)
+			finish.set_shader_parameter("lacquer",paint_tint)
 			body_mesh.set_surface_override_material(surface, finish)
 	var lamp_height := 0.72
 	var tail_height := 0.83

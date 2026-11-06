@@ -44,15 +44,7 @@ func _ready() -> void:
 	collision_mask = 1 | 2 | 4 | 8
 	add_to_group("pedestrians")
 	_obstacle_ray = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()])
-	var wrapper := model_scene.instantiate()
-	model = wrapper.get_node("GeneralSkeleton")
-	wrapper.remove_child(model)
-	for mesh in model.get_children():
-		if mesh is MeshInstance3D and not mesh.visible: mesh.free()
-	wrapper.free()
-	add_child(model)
-	motion = Motion.new()
-	motion.bind(model)
+	_build_model()
 	# Distribute bone updates across physics frames instead of updating the crowd together.
 	jogger = world.citizens.size() % 9 == 3
 	var phase_offset := float(get_instance_id() % 61) / 61.0
@@ -69,6 +61,39 @@ func _ready() -> void:
 	_choose_next()
 	_sensor_tick = phase_offset / 12.0
 
+
+func _build_model() -> void:
+	var wrapper := model_scene.instantiate()
+	model = wrapper.get_node("GeneralSkeleton")
+	wrapper.remove_child(model)
+	for mesh in model.get_children():
+		if mesh is MeshInstance3D and not mesh.visible: mesh.free()
+	wrapper.free()
+	add_child(model)
+	motion = Motion.new()
+	motion.bind(model)
+
+
+var possessed := false
+var player_direction := Vector3.ZERO
+
+func set_possessed(active: bool) -> void:
+	possessed = active
+	player_direction = Vector3.ZERO
+	chat_time = 0
+	crossing_junction = -1
+	if not active:
+		var best := INF
+		for candidate: Vector2i in world.walk_neighbors:
+			var distance := global_position.distance_squared_to(world.walk_position(candidate))
+			if distance < best:
+				best = distance
+				cell = candidate
+		# Walk to the nearest sidewalk first, even when released in a crosswalk.
+		target_cell = cell
+		previous_cell = cell
+		_crossing_target = -1
+		_sensor_tick = 0
 
 func _exit_tree() -> void:
 	if is_instance_valid(world): crossing_junction = -1
@@ -103,7 +128,10 @@ func _physics_process(delta: float) -> void:
 	knockdown = maxf(0, knockdown - delta)
 	_passing_time = maxf(0, _passing_time - delta)
 	_sensor_tick -= delta
-	if _sensor_tick <= 0.0:
+	if possessed:
+		_walk_direction = player_direction
+		_desired_speed = 3.0
+	elif _sensor_tick <= 0.0:
 		_plan_walk()
 		_sensor_tick += 1.0 / 12.0
 	velocity.x = move_toward(velocity.x, _walk_direction.x * _desired_speed, delta * 6)
@@ -111,11 +139,14 @@ func _physics_process(delta: float) -> void:
 	if not is_on_floor(): velocity.y -= 20 * delta
 	else: velocity.y = 0
 	if not is_on_floor() or not velocity.is_zero_approx(): move_and_slide()
+	if possessed:
+		position.x = clampf(position.x,-49,49)
+		position.z = clampf(position.z,-49,49)
 	var actual_speed := Vector2(velocity.x, velocity.z).length()
 	if actual_speed > 0.1 and chat_time <= 0.0: rotation.y = lerp_angle(rotation.y, atan2(_walk_direction.x, _walk_direction.z), minf(delta * 6, 1))
 	_update_animation(delta, actual_speed)
 	model.rotation.z = lerpf(model.rotation.z, 1.4 if knockdown > 0 or health <= 0 else 0.0, minf(delta * 6, 1))
-	if actual_speed < 0.1 and (_can_walk or _obstructed) and health > 0 and knockdown <= 0:
+	if not possessed and actual_speed < 0.1 and (_can_walk or _obstructed) and health > 0 and knockdown <= 0:
 		blocked_time += delta
 		if blocked_time > 3 and crossing_junction < 0:
 			previous_cell = target_cell
@@ -198,7 +229,7 @@ func _update_animation(delta: float, actual_speed: float) -> void:
 
 
 func can_chat() -> bool:
-	return health > 0 and knockdown <= 0 and flee_time <= 0 and crossing_junction < 0 and _crossing_target < 0 and chat_cooldown <= 0
+	return not possessed and health > 0 and knockdown <= 0 and flee_time <= 0 and crossing_junction < 0 and _crossing_target < 0 and chat_cooldown <= 0
 
 
 func greet(other: CharacterBody3D, duration: float) -> void:
