@@ -13,6 +13,7 @@ var previous_position := Vector3.ZERO
 var interior_look := Vector2.ZERO
 var exterior_look := Vector2.ZERO
 var orbit_timeout := 0.0
+var look_ahead := Vector3.ZERO
 var body: VehicleBody3D
 var planar_forward := Vector3.BACK
 
@@ -62,7 +63,10 @@ func _physics_process(delta: float) -> void:
 		# Also test the smoothed segment so interpolation cannot cut through a wall.
 		var smoothed := global_position.lerp(safe_position, 1 - exp(-delta * 7))
 		global_position = _avoid_obstacles(target, smoothed)
-		if global_position.distance_squared_to(target) > 0.01: look_at(target, Vector3.UP)
+		var travel := Vector3(body.linear_velocity.x, 0.0, body.linear_velocity.z)
+		var lead := (travel * 0.15).limit_length(2.4) if orbit_timeout <= 0 else Vector3.ZERO
+		look_ahead = look_ahead.lerp(lead, 1.0 - exp(-delta * 2.5))
+		if global_position.distance_squared_to(target + look_ahead) > 0.01: look_at(target + look_ahead, Vector3.UP)
 	elif camera_type == CameraType.INTERIOR:
 		_apply_interior_view()
 	else:

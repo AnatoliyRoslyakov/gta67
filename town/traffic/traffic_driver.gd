@@ -28,6 +28,8 @@ var brake_lights: Array[MeshInstance3D] = []
 var turn_lights: Array[MeshInstance3D] = []
 var damage := 0.0
 var wheel_distance := 0.0
+var blocked_seconds := 0.0
+var queue_release_delay := 0.0
 var _traffic_sensor_tick := 0.0
 var _traffic_obstacle_speed := INF
 var _traffic_ray: PhysicsRayQueryParameters3D
@@ -152,14 +154,24 @@ func _physics_process(delta: float) -> void:
 		desired = minf(desired, sqrt(maxf(0, 6.0 * (global_position.distance_to(world.lane_position(next_state)) - 1.0))))
 	if state == next_state: desired = 0.0
 	var turning := _is_turn(following_state)
-	if turning and global_position.distance_to(world.lane_position(next_state)) < 8.0:
-		desired = minf(desired, 3.0)
+	if turning:
+		var approach_distance := maxf(0.0, global_position.distance_to(world.lane_position(next_state)) - 4.5)
+		desired = minf(desired, sqrt(9.0 + 4.5 * approach_distance))
 	desired = minf(desired, world.approach_speed(self, state, next_state))
 	_traffic_sensor_tick -= delta
 	if _traffic_sensor_tick <= 0.0:
 		_traffic_sensor_tick += 0.05
 		_traffic_obstacle_speed = _sense_obstacles(direction, maxf(9, speed * 2.2))
+	if desired > 1.5 and _traffic_obstacle_speed < 0.6 and speed < 0.8 and damage < 70:
+		blocked_seconds += delta
+	else:
+		blocked_seconds = 0.0
 	desired = minf(desired, _traffic_obstacle_speed)
+	if desired < 0.3 and speed < 0.4:
+		queue_release_delay = 0.2 + 0.3 * following_time
+	elif queue_release_delay > 0.0:
+		queue_release_delay -= delta
+		desired = 0.0
 	if damage > 70: desired = 0
 	var braking := _drive_toward(target, desired, delta)
 	_traffic_visual_elapsed += delta

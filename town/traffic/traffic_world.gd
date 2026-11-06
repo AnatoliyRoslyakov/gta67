@@ -10,7 +10,7 @@ const DRIVER_BUCKET_SIZE := 20.0
 const DRIVER_INDEX_INTERVAL := 0.1
 const DIRECTIONS := [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-1, 0)]
 const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle", "UAZ469"]
-const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat"]
+const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat", "BusinessMan_Suit"]
 
 @export var vehicle_count := 40
 @export var citizen_count := 64
@@ -75,6 +75,7 @@ func _initialize() -> void:
 	_rebuild_driver_index()
 	await get_tree().physics_frame
 	initialized = true
+	add_child(preload("res://town/street_life.gd").new())
 
 
 func _physics_process(delta: float) -> void:

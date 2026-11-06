@@ -73,6 +73,9 @@ func configure(city_map: Node3D, sun: DirectionalLight3D, world_env: WorldEnviro
 	_environment.glow_intensity = 0.35
 	_environment.glow_bloom = 0.0
 	_environment.glow_hdr_threshold = 1.3
+	_environment.adjustment_enabled = true
+	_environment.adjustment_contrast = 1.045
+	_environment.adjustment_saturation = 0.96
 	_environment.ssr_max_steps = 32
 	_environment.ssr_depth_tolerance = 0.3
 	_environment.fog_enabled = true
@@ -196,7 +199,7 @@ func _apply_time(force := false) -> void:
 		_environment.tonemap_exposure = lerpf(1.1, 0.95, daylight)
 		_environment.fog_light_color = Color("252e48").lerp(horizon, daylight)
 		_environment.fog_light_energy = lerpf(0.5, 0.85, daylight)
-		_environment.fog_density = lerpf(0.0016, 0.00075, daylight) + golden * daylight * 0.0003
+		_environment.fog_density = lerpf(0.0016, 0.00075, daylight) + golden * daylight * 0.0011
 		for material in _cloud_materials:
 			material.albedo_color = Color("56617b").lerp(Color("d9e1e5").lerp(Color("e4c8b8"), golden * 0.5), daylight)
 	_environment.ssr_enabled = _forward_plus and screen_space_reflections and _night_amount > 0.15
