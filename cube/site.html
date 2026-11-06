@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#eae9df">
+<link rel="icon" href="index.icon.png">
+<title>Малый квартал · Город в кубе</title>
+<style>
+:root{color-scheme:light;--paper:#eae9df;--ink:#273e38;--line:#bfc6b8;--quiet:#56675e;--red:#ae553a}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:"Helvetica Neue",Arial,sans-serif}button{font:inherit;color:inherit;cursor:pointer}button:focus-visible,canvas:focus-visible{outline:3px solid var(--red);outline-offset:-3px}svg{display:block}
+.page{height:100svh;min-height:550px;display:grid;grid-template-rows:72px minmax(0,1fr) 64px;max-width:2048px;margin:auto}
+header,footer{margin:0 clamp(20px,4vw,74px);display:flex;align-items:center;justify-content:space-between;gap:12px}header{border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:650;letter-spacing:-.06em}.brand svg{color:var(--red)}.mono,.live,.tip{font:11px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.07em}.live{display:flex;gap:9px;align-items:center}.dot{width:7px;height:7px;border-radius:50%;background:#ad9354}.ready .dot{background:#508261;box-shadow:0 0 0 4px #50826118}
+main{position:relative;min-height:0;isolation:isolate;display:grid;grid-template-columns: minmax(245px,27%) minmax(0,1fr);align-items:stretch}
+.copy{display:flex;flex-direction:column;justify-content:center;padding-left:clamp(20px,4vw,74px);z-index:1;pointer-events:none}.copy h1{font:normal clamp(54px,6.3vw,106px)/.92 Georgia,"Times New Roman",serif;letter-spacing:-.077em;margin:0 0 22px}.copy p{max-width:225px;color:var(--quiet);font-size:15px;line-height:1.52;margin:0}.mark{width:38px;height:3px;background:var(--red);margin-bottom:23px}
+.viewer{position:relative;min-width:0;min-height:0;margin:10px clamp(15px,3vw,50px) 10px 0}.viewer canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab;outline:none}.viewer canvas:active{cursor:grabbing}
+.overlay{position:absolute;inset:0;display:grid;place-content:center;background:var(--paper);text-align:center;color:var(--quiet);padding:25px}.overlay[hidden]{display:none}progress{accent-color:var(--red);width:160px;height:5px;margin:12px auto}
+footer{border-top:1px solid var(--line)}.tip{color:var(--quiet);letter-spacing:.01em}.tools{display:flex;align-items:center;gap:5px}.tools button{height:37px;min-width:38px;border:1px solid transparent;border-radius:7px;background:transparent;display:grid;place-items:center}.tools button:hover{border-color:var(--line);background:#dedfd2}.tools button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}.tools button:disabled{opacity:.45;cursor:wait}.divider{height:18px;width:1px;background:var(--line);margin:0 4px}.touch-tip{display:none}
+@media(max-width:720px){.page{grid-template-rows:56px minmax(0,1fr) 57px;min-height:480px}main{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.copy{padding:24px 20px 0;display:block}.copy h1{font-size:45px;line-height:1;margin:0 0 5px}.copy h1 br{display:none}.mark{display:none}.copy p{max-width:none;font-size:13px}.viewer{margin:0 6px}.tip{font-size:10px}.tools{gap:0}.brand{font-size:17px}.live{font-size:10px}}
+@media(pointer:coarse){.mouse-tip{display:none}.touch-tip{display:inline}}
+@media(max-height:550px) and (min-width:721px){.page{min-height:340px;grid-template-rows:45px minmax(0,1fr) 48px}.copy h1{font-size:54px}}
+</style>
+</head>
+<body>
+<div class="page">
+<header><div class="brand"><svg width="29" height="31" viewBox="0 0 30 32" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m15 2 12 7v14l-12 7-12-7V9Z M3 9l12 7 12-7 M15 16v14"/><path d="m8.5 12.5 12-7"/></svg>Город в кубе</div><div class="live" role="status"><span class="dot"></span><span id="live">Загрузка</span></div></header>
+<main><section class="copy"><span class="mark"></span><h1>Малый <br>квартал</h1><p>Два перекрёстка, сквер и кинотеатр под стеклом. Приблизьтесь, чтобы рассмотреть улицы.</p></section>
+<div class="viewer"><canvas id="canvas" tabindex="0" title="Двойной щелчок — приблизить выбранную улицу" aria-label="Трёхмерный квартал. Стрелки вращают камеру, плюс и минус меняют масштаб."></canvas><div class="overlay" id="status"><span id="message">Загружаем квартал…</span><progress id="progress"></progress></div></div></main>
+<footer><div class="tip"><span class="mouse-tip">Тяните для поворота · Колесо для масштаба</span><span class="touch-tip">Поворот пальцем · Масштаб щипком</span></div>
+<div role="group" aria-label="Камера" class="tools">
+<button data-cmd="spin" disabled aria-label="Автовращение" aria-pressed="true" title="Автовращение"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 8c2-3 11-4 14 0s-1 9-8 9c-4 0-7-1-8-4m0 4v-4h4"/><circle cx="12" cy="11" r="2"/></svg></button><span class="divider"></span>
+<button data-cmd="out" disabled aria-label="Отдалить" title="Отдалить"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5"><path d="M2 8h12"/></svg></button>
+<button data-cmd="in" disabled aria-label="Приблизить" title="Приблизить"><svg width="16" height="16" viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.5"><path d="M2 8h12M8 2v12"/></svg></button><span class="divider"></span>
+<button data-cmd="reset" disabled aria-label="Исходный ракурс" title="Исходный ракурс"><svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8a7 7 0 1 1 1 6M3 3v5h5"/></svg></button></div></footer></div>
+<script src="$GODOT_URL"></script>
+<script>
+const canvas=document.getElementById('canvas'), overlay=document.getElementById('status'), live=document.getElementById('live');
+const buttons=[...document.querySelectorAll('[data-cmd]')];
+let command;
+window.quarterUI={
+ connectGame(fn){
+  command=fn;
+  buttons.forEach(b=>b.disabled=false);
+  live.textContent='В эфире';
+  document.body.classList.add('ready');
+  overlay.hidden=true;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(()=>command('spin'));
+ },
+ spinChanged(on){buttons[0].setAttribute('aria-pressed',String(on))}
+};
+buttons.forEach(b=>b.addEventListener('click',()=>command?.(b.dataset.cmd)));
+function resize(){
+ const rect=canvas.getBoundingClientRect(), scale=Math.min(devicePixelRatio||1,1.6);
+ canvas.width=Math.max(1,Math.round(rect.width*scale));
+ canvas.height=Math.max(1,Math.round(rect.height*scale));
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+function failure(error){
+ overlay.hidden=false;live.textContent='Ошибка запуска';
+ document.getElementById('message').textContent='Не удалось открыть квартал. '+String(error);
+ document.getElementById('progress').hidden=true;
+}
+try {
+ const config=$GODOT_CONFIG;
+ const missing=Engine.getMissingFeatures({threads:false});
+ if(missing.length) throw Error('Требуется '+missing.join(', '));
+ resize();
+ new Engine(config).startGame({canvas,canvasResizePolicy:0,onProgress:(loaded,total)=>{
+  const p=document.getElementById('progress');
+  if(total>0){p.max=total;p.value=loaded}
+ }}).catch(failure);
+} catch(error){failure(error)}
+</script></body></html>

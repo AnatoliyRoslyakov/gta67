@@ -13,6 +13,9 @@ var _props: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
+	if ProjectSettings.get_setting("application/run/main_scene") == "res://cube/quarter.tscn":
+		set_process(false)
+		return
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	var settings := ConfigFile.new()
 	if settings.load(SETTINGS_PATH) == OK:

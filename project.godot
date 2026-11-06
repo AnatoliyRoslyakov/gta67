@@ -10,14 +10,16 @@ config_version=5
 
 [application]
 
-config/name="GTA67"
-config/version="3.0"
-config/description="An open city with driving, walking, traffic and a dynamic day-night cycle."
+config/name="GTA67 — Квартал в кубе"
+config/version="4"
+config/description="A live city miniature in a glass cube."
 config/tags=PackedStringArray("3d", "city", "physics", "vehicle")
 run/max_fps=60
-run/main_scene="res://car_select/car_select.tscn"
+run/main_scene="res://cube/quarter.tscn"
 config/features=PackedStringArray("4.7")
-config/icon="res://icon.webp"
+config/icon="res://cube/icon.svg"
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0.918, 0.914, 0.875, 1)
 
 [autoload]
 
@@ -213,13 +215,20 @@ reset_vehicle={
 "events": [Object(InputEventKey,"physical_keycode":82)]
 }
 
+[input_devices]
+
+pointing/emulate_mouse_from_touch=false
+
 [physics]
 
-common/physics_ticks_per_second=120
+common/physics_ticks_per_second=60
 3d/physics_engine="Jolt Physics"
 common/physics_interpolation=true
 
 [rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
 
 textures/vram_compression/import_etc2_astc=true
 lights_and_shadows/directional_shadow/size=2048
