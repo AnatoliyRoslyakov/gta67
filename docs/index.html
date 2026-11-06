@@ -19,13 +19,32 @@ footer{border-top:1px solid var(--line)}.tip{color:var(--quiet);letter-spacing:.
 @media(max-width:720px){.page{grid-template-rows:56px minmax(0,1fr) 57px;min-height:480px}main{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.copy{padding:24px 20px 0;display:block}.copy h1{font-size:45px;line-height:1;margin:0 0 5px}.copy h1 br{display:none}.mark{display:none}.copy p{max-width:none;font-size:13px}.viewer{margin:0 6px}.tip{font-size:10px}.tools{gap:0}.brand{font-size:17px}.live{font-size:10px}}
 @media(pointer:coarse){.mouse-tip{display:none}.touch-tip{display:inline}}
 @media(max-height:550px) and (min-width:721px){.page{min-height:340px;grid-template-rows:45px minmax(0,1fr) 48px}.copy h1{font-size:54px}}
+body{transition:background-color .8s,color .8s}
+body[data-time=morning]{--paper:#e9e4db}
+body[data-time=evening]{--paper:#d4c4bb;--line:#ad9e94}
+body[data-time=night]{--paper:#232d34;--ink:#eeeae1;--quiet:#b9c7c8;--line:#47565a;--red:#da976f}
+.viewer{display:grid;grid-template-rows:auto minmax(0,1fr)}
+.stage{position:relative;min-height:0;min-width:0}
+.period-bar{display:flex;justify-content:center;align-items:center;gap:10px;padding:8px 0 3px;flex-wrap:wrap}
+.periods{display:flex;gap:2px;border:1px solid var(--line);padding:3px;border-radius:24px}
+.periods button,.sound{background:transparent;border:0;color:var(--quiet);font-size:12px}
+.periods button{padding:7px 13px;border-radius:20px}
+.periods button[aria-pressed=true]{color:var(--paper);background:var(--ink)}
+.sound{width:35px;height:35px;display:grid;place-items:center;border:1px solid var(--line);border-radius:50%}
+.sound [data-muted]{display:block}.sound[aria-pressed=true] [data-muted]{display:none}
+.sound [data-playing]{display:none}.sound[aria-pressed=true] [data-playing]{display:block}
+.periods button:disabled{opacity:.45;cursor:wait}
+@media(max-width:720px){.period-bar{padding-top:12px}.periods button{padding:6px 10px}}
 </style>
 </head>
 <body>
 <div class="page">
 <header><div class="brand"><svg width="29" height="31" viewBox="0 0 30 32" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m15 2 12 7v14l-12 7-12-7V9Z M3 9l12 7 12-7 M15 16v14"/><path d="m8.5 12.5 12-7"/></svg>Город в кубе</div><div class="live" role="status"><span class="dot"></span><span id="live">Загрузка</span></div></header>
 <main><section class="copy"><span class="mark"></span><h1>Малый <br>квартал</h1><p>Фрагмент города GTA67 под стеклом. Приблизьте улицу, чтобы увидеть машины и прохожих.</p></section>
-<div class="viewer"><canvas id="canvas" tabindex="0" title="Двойной щелчок — приблизить выбранную улицу" aria-label="Трёхмерный квартал. Стрелки вращают камеру, плюс и минус меняют масштаб."></canvas><div class="overlay" id="status"><span id="message">Загружаем квартал…</span><progress id="progress"></progress></div></div></main>
+<div class="viewer"><div class="period-bar"><div class="periods" role="group" aria-label="Время суток">
+<button disabled data-cmd="morning" aria-pressed="false">Утро</button><button disabled data-cmd="day" aria-pressed="true">День</button><button disabled data-cmd="evening" aria-pressed="false">Вечер</button><button disabled data-cmd="night" aria-pressed="false">Ночь</button></div>
+<button type="button" class="sound" aria-label="Звук города" title="Звук города" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><path d="M3 9h4l5-4v14l-5-4H3Z"/><g data-playing><path d="M15 8q4 4 0 8m3-11q7 7 0 14"/></g><path data-muted d="m16 9 6 6m0-6-6 6"/></svg></button></div>
+<div class="stage"><canvas id="canvas" tabindex="0" title="Двойной щелчок — приблизить выбранную улицу" aria-label="Трёхмерный квартал. Стрелки вращают камеру, плюс и минус меняют масштаб."></canvas><div class="overlay" id="status"><span id="message">Загружаем квартал…</span><progress id="progress"></progress></div></div></div></main>
 <footer><div class="tip"><span class="mouse-tip">Тяните для поворота · Колесо для масштаба</span><span class="touch-tip">Поворот пальцем · Масштаб щипком</span></div>
 <div role="group" aria-label="Камера" class="tools">
 <button data-cmd="spin" disabled aria-label="Автовращение" aria-pressed="true" title="Автовращение"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 8c2-3 11-4 14 0s-1 9-8 9c-4 0-7-1-8-4m0 4v-4h4"/><circle cx="12" cy="11" r="2"/></svg></button><span class="divider"></span>
@@ -46,9 +65,34 @@ window.quarterUI={
   overlay.hidden=true;
   if(matchMedia('(prefers-reduced-motion: reduce)').matches) requestAnimationFrame(()=>command('spin'));
  },
- spinChanged(on){buttons[0].setAttribute('aria-pressed',String(on))}
+ spinChanged(on){document.querySelector('[data-cmd=spin]').setAttribute('aria-pressed',String(on))}
 };
-buttons.forEach(b=>b.addEventListener('click',()=>command?.(b.dataset.cmd)));
+buttons.forEach(b=>b.addEventListener('click',()=>{
+ const key=b.dataset.cmd;
+ command?.(key);
+ if(b.closest('.periods')){
+  document.body.dataset.time=key;
+  document.querySelectorAll('.periods button').forEach(tab=>tab.setAttribute('aria-pressed',String(tab===b)));
+ }
+}));
+const soundButton=document.querySelector('.sound');
+const city=new Audio('city.m4a');
+city.preload='none'; city.loop=true; city.volume=.48;
+let wantsSound=true;
+function syncSound(){soundButton.setAttribute('aria-pressed',String(!city.paused))}
+city.addEventListener('playing',syncSound);city.addEventListener('pause',syncSound);
+async function startSound(){if(wantsSound && !document.hidden){try{await city.play()}catch{}syncSound()}}
+soundButton.addEventListener('click',()=>{
+ if(!city.paused){wantsSound=false;city.pause()}else{wantsSound=true;startSound()}
+});
+function firstGesture(e){
+ if(soundButton.contains(e.target))return;
+ document.removeEventListener('pointerdown',firstGesture);
+ document.removeEventListener('keydown',firstGesture);
+ startSound();
+}
+document.addEventListener('pointerdown',firstGesture);document.addEventListener('keydown',firstGesture);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)city.pause();else startSound()});
 function resize(){
  const rect=canvas.getBoundingClientRect(), scale=Math.min(devicePixelRatio||1,1.6);
  canvas.width=Math.max(1,Math.round(rect.width*scale));
@@ -61,7 +105,7 @@ function failure(error){
  document.getElementById('progress').hidden=true;
 }
 try {
- const config={"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":19797252,"index.wasm":39514754},"focusCanvas":false,"gdextensionLibs":[],"godotPoolSize":4};
+ const config={"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":22609648,"index.wasm":39514754},"focusCanvas":false,"gdextensionLibs":[],"godotPoolSize":4};
  const missing=Engine.getMissingFeatures({threads:false});
  if(missing.length) throw Error('Требуется '+missing.join(', '));
  resize();

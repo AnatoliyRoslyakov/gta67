@@ -1,8 +1,9 @@
 extends Node3D
 
 # Fixed audio pool, shared streams and a single world-space particle emitter.
-const ENGINE = preload("res://vehicles/engine.wav")
-const HORNS = [preload("res://vehicles/honk_1.wav"), preload("res://vehicles/honk_3.wav")]
+var engine: AudioStream
+var horns: Array[AudioStream] = []
+var steps: Array = []
 const PROPS = [
 	preload("res://Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Newspaper_01.tscn"),
 	preload("res://Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_TrashBag_02.tscn")
@@ -25,16 +26,21 @@ var last_pair := -1
 
 func _ready() -> void:
 	world = get_parent()
-	for i in 3:
-		var motor := _voice(52, -12)
-		motor.stream = ENGINE
-		motors.append(motor)
-		motor_cars.append(null)
-	horn = _voice(48, -9)
-	speech = _voice(23, -3)
-	footsteps = _voice(8, -9)
-	for i in 6:
-		lines.append(load("res://town/sound/street_line_%d.wav" % i))
+	if world.positional_audio:
+		engine = load("res://vehicles/engine.wav")
+		for path in ["res://vehicles/honk_1.wav","res://vehicles/honk_3.wav"]:
+			horns.append(load(path))
+		steps = load("res://town/player/city_audio.gd").STEPS
+		for i in 3:
+			var motor := _voice(52, -12)
+			motor.stream = engine
+			motors.append(motor)
+			motor_cars.append(null)
+		horn = _voice(48, -9)
+		speech = _voice(23, -3)
+		footsteps = _voice(8, -9)
+		for i in 6:
+			lines.append(load("res://town/sound/street_line_%d.wav" % i))
 	_make_paper()
 	var cells: Array = world.walk_neighbors.keys()
 	cells.shuffle()
@@ -95,6 +101,9 @@ func _process(delta: float) -> void:
 	if paper.amount != budget:
 		paper.amount = budget
 		paper.fixed_fps = 12 if CityPerformance.quality == 0 else 20
+	if not world.positional_audio:
+		if chat_wait <= 0: _conversation(origin)
+		return
 	var nearby: Array = world.nearby_drivers(origin, 52.0)
 	nearby.sort_custom(func(a, b): return a.global_position.distance_squared_to(origin) < b.global_position.distance_squared_to(origin))
 	var selected := nearby.slice(0, motors.size())
@@ -114,7 +123,7 @@ func _process(delta: float) -> void:
 		if not motor.playing: motor.play(i * 0.11)
 		if horn_wait <= 0 and car.blocked_seconds > 1.7 and car.global_position.distance_squared_to(origin) < 38 ** 2:
 			horn.global_position = car.global_position
-			horn.stream = HORNS.pick_random()
+			horn.stream = horns.pick_random()
 			horn.pitch_scale = randf_range(0.92, 1.12)
 			horn.play()
 			horn_wait = randf_range(5, 10)
@@ -128,7 +137,7 @@ func _process(delta: float) -> void:
 				nearest = person
 		if nearest:
 			footsteps.global_position = nearest.global_position
-			footsteps.stream = preload("res://town/player/city_audio.gd").STEPS.pick_random()
+			footsteps.stream = steps.pick_random()
 			footsteps.pitch_scale = randf_range(0.88, 1.08)
 			footsteps.play()
 		foot_wait = 0.42
@@ -151,6 +160,11 @@ func _conversation(origin: Vector3) -> void:
 			if separation < 1 or separation > 4.8 ** 2: continue
 			var ray := PhysicsRayQueryParameters3D.create(first.global_position + Vector3.UP, person.global_position + Vector3.UP, 1 | 4)
 			if not get_world_3d().direct_space_state.intersect_ray(ray).is_empty(): continue
+			if not world.positional_audio:
+				first.greet(person,3.8)
+				person.greet(first,3.8)
+				chat_wait = 7.0
+				return
 			last_pair = (last_pair + randi_range(1, 2)) % 3
 			reply_line = last_pair * 2 + 1
 			var duration := lines[reply_line - 1].get_length() + lines[reply_line].get_length() + 1.1

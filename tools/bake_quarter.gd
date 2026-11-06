@@ -8,6 +8,9 @@ const HALF := 50.0
 var batches := {}
 var collision := PackedVector3Array()
 var finishes := {}
+var room_finishes := {}
+var room_masks: Node
+var street_lamps := PackedVector3Array()
 var textures := {}
 var bounds := AABB(Vector3(-HALF,-.6,-HALF),Vector3(2*HALF,86,2*HALF))
 
@@ -19,6 +22,8 @@ func build() -> void:
 	var map: Node3D = load(SOURCE).instantiate()
 	map.position = -CENTER
 	root.add_child(map)
+	prepare_lots(map)
+	room_masks = load("res://town/atmosphere.gd").new()
 	var graph: Node3D = load("res://town/traffic/traffic_world.gd").new()
 	graph.city_map = map
 	graph._extract_surfaces()
@@ -32,10 +37,23 @@ func build() -> void:
 		if "Ocean_" in str(node.get_path()) or "Skydome" in str(node.get_path()) or "Skyline" in str(node.get_path()): continue
 		var box: AABB = node.global_transform * node.get_aabb()
 		if not bounds.grow(.01).intersects(box): continue
+		if node.scene_file_path.ends_with("SM_Prop_LightPole_Base_01.tscn"):
+			street_lamps.append(node.global_transform * Vector3(0,6.22,1.9635))
 		var solid := str(node.name).begins_with("SM_Bld_") or str(node.name).begins_with("SM_Env_Sidewalk_")
 		for i in node.mesh.get_surface_count():
 			if node.mesh.surface_get_primitive_type(i) != Mesh.PRIMITIVE_TRIANGLES: continue
 			var finish := web_material(node.get_active_material(i))
+			if str(node.name).begins_with("SM_Bld_Office") or str(node.name).begins_with("SM_Bld_Apartment"):
+				var key := [finish,posmod(hash(node.global_position.round()),3)]
+				if not room_finishes.has(key):
+					var rooms: StandardMaterial3D = finish.duplicate()
+					rooms.emission_enabled = true
+					rooms.emission = Color.BLACK
+					rooms.emission_texture = room_masks._room_mask(key[1])
+					rooms.emission_energy_multiplier = 0
+					rooms.set_meta("rooms",true)
+					room_finishes[key] = rooms
+				finish = room_finishes[key]
 			if not batches.has(finish):
 				var st := SurfaceTool.new()
 				st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -67,14 +85,77 @@ func build() -> void:
 	pavement.position.y = -.5
 	body.add_child(pavement)
 	pavement.owner = district
+	district.set_meta("lamps",street_lamps)
 	var packed := PackedScene.new()
 	var status := packed.pack(district)
 	if status == OK: status = ResourceSaver.save(packed,OUTPUT+"district.scn",ResourceSaver.FLAG_COMPRESS)
 	print("District: ",combined.get_aabb()," / ",combined.get_surface_count()," material batches, ",collision.size()/3," collision faces. ", error_string(status))
 	district.free()
 	graph.free()
+	room_masks.free()
 	map.free()
 	quit(status)
+
+# Rehouse the two modular apartment compounds as complete assemblies; the
+# facade pieces and rooftop accessories must keep their relative positions.
+func prepare_lots(map: Node3D) -> void:
+	var block_a := map.get_node("City_Area_02/Apartment_Block_05") as Node3D
+	var block_b := map.get_node("City_Area_02/Apartment_Block_06") as Node3D
+	map.get_node("City_Area_02/Apartment_Block_04").free()
+	fit_lot(block_a,Rect2(-22,23,32,25))
+	fit_lot(block_b,Rect2(16,-48,32,16))
+	var remove := []
+	for n: MeshInstance3D in map.find_children("*","MeshInstance3D",true,false):
+		if block_a.is_ancestor_of(n) or block_b.is_ancestor_of(n) or not n.mesh: continue
+		var box := n.global_transform*n.get_aabb()
+		if not bounds.grow(.1).intersects(box): continue
+		# Outside the original central parcels, roofs, signs and air-conditioners
+		# belong to buildings beyond the slice. Omit those assemblies together.
+		if str(n.name).begins_with("SM_Bld_"):
+			if box.position.x < -49 or box.end.x > 49 or box.position.z < -49 or box.end.z > 49:
+				remove.append(n)
+		elif str(n.name).begins_with("SM_Prop_") and box.position.y>3:
+			var c := box.get_center()
+			if absf(c.x)>38 or absf(c.z)>33: remove.append(n)
+	for n in remove:
+		if is_instance_valid(n): n.free()
+	place_tower(map,"SM_Bld_OfficeRound_03",Vector2(-42.5,-37.8),.56,1.17)
+	place_tower(map,"SM_Bld_OfficeSquare_03",Vector2(21.4,36.4),.97,1.30)
+
+func footprint(group: Node3D) -> AABB:
+	var result := AABB()
+	var first := true
+	for n: MeshInstance3D in group.find_children("*","MeshInstance3D",true,false):
+		if not n.mesh or not n.is_visible_in_tree(): continue
+		var box := n.global_transform*n.get_aabb()
+		result = box if first else result.merge(box)
+		first = false
+	return result
+
+func fit_lot(group: Node3D, lot: Rect2) -> void:
+	var box := footprint(group)
+	var horizontal := minf(lot.size.x/box.size.x,lot.size.y/box.size.z)
+	group.scale *= Vector3(horizontal,maxf(.83,horizontal),horizontal)
+	box = footprint(group)
+	var center := box.get_center()
+	group.global_position += Vector3(lot.get_center().x-center.x,0,lot.get_center().y-center.z)
+
+func place_tower(map: Node3D, kind: String, center: Vector2, width: float, height: float) -> void:
+	var family := kind.left(kind.rfind("_"))
+	var y := 0.0
+	# POLYGON tower prefabs are modular. Each shaft needs its matching
+	# street-level entrance and capped roof at the same horizontal pivot.
+	for piece: String in [family+"_Base_01",kind,family+"_Roof_01"]:
+		var mesh: MeshInstance3D = load("res://Assets/Synty/PolygonCity/Prefabs/Buildings/%s.tscn" % piece).instantiate()
+		map.add_child(mesh)
+		mesh.scale = Vector3(width,height if piece==kind else .95,width)
+		var box := mesh.global_transform * mesh.get_aabb()
+		mesh.global_position += Vector3(center.x-box.get_center().x,y-box.position.y,center.y-box.get_center().z)
+		y += box.size.y-.10
+	var vent: MeshInstance3D = load("res://Assets/Synty/PolygonCity/Prefabs/Props/SM_Prop_Roof_Aircon_02.tscn").instantiate()
+	map.add_child(vent)
+	var unit_box := vent.global_transform*vent.get_aabb()
+	vent.global_position += Vector3(center.x-unit_box.get_center().x,y-unit_box.position.y,center.y-unit_box.get_center().z)
 
 func cells_inside(cells: Dictionary, step: float) -> Dictionary:
 	var result := {}
@@ -142,6 +223,10 @@ func append_triangles(st: SurfaceTool, arrays: Array, pose: Transform3D, solid: 
 			var tri := [poly[0],poly[k],poly[k+1]]
 			if pose.basis.determinant()<0: tri.reverse()
 			var contact := solid and minf(tri[0][0].y,minf(tri[1][0].y,tri[2][0].y))<2.5
+			if contact:
+				var ab: Vector3 = tri[1][0]-tri[0][0]
+				var ac: Vector3 = tri[2][0]-tri[0][0]
+				contact = ab.cross(ac).length_squared()>.035 and maxf(tri[0][0].y,maxf(tri[1][0].y,tri[2][0].y))>.10
 			for v: Array in tri:
 				st.set_normal(v[1])
 				st.set_uv(v[2])

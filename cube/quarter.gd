@@ -4,7 +4,7 @@ const District = preload("res://Assets/WebQuarter/district.scn")
 const Traffic = preload("res://cube/traffic.gd")
 const Glass = preload("res://cube/glass.gdshader")
 var camera := Camera3D.new()
-var yaw := 0.66
+var yaw := -0.48
 var pitch := 0.57
 var zoom_factor := 1.0
 var zoom_target := 1.0
@@ -22,11 +22,23 @@ var fast_windows := 0
 var observer := AudioListener3D.new()
 var traffic := Traffic.new()
 var atmosphere: Node
+var env := Environment.new()
+var sun := DirectionalLight3D.new()
+var room_lights: Array[StandardMaterial3D] = []
+var street_lights: Array[OmniLight3D] = []
+var selected_time := "day"
+var transition: Tween
+# Sun angle, sunlight, skylight, energy, window light and gallery backdrop.
+const TIMES := {
+	"morning": [Vector3(-23,-100,0),Color("ffd0a1"),Color("ecdae1"),.92,.78,.15,Color("e9e4db")],
+	"day": [Vector3(-54,-32,0),Color("fff1d4"),Color("e9f1f2"),.82,.85,0.0,Color("eae9df")],
+	"evening": [Vector3(-16,75,0),Color("ffa16a"),Color("dcc5da"),.87,.59,.78,Color("d4c4bb")],
+	"night": [Vector3(-48,120,0),Color("a9c5f7"),Color("aebfdf"),.32,.33,1.3,Color("232d34")]
+}
 var bridge: JavaScriptObject
 var callback: JavaScriptObject
 
 func _ready() -> void:
-	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("eae9df")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -35,7 +47,6 @@ func _ready() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-54,-32,0)
 	sun.light_color = Color("fff1d4")
 	sun.light_energy = 0.82
@@ -47,6 +58,22 @@ func _ready() -> void:
 	add_child(district)
 	add_child(observer)
 	observer.make_current()
+	atmosphere = self
+	for mesh: MeshInstance3D in district.find_children("*","MeshInstance3D",true,false):
+		for i in mesh.mesh.get_surface_count():
+			var material := mesh.get_active_material(i) as StandardMaterial3D
+			if material and material.has_meta("rooms"): room_lights.append(material)
+	for pos: Vector3 in district.get_meta("lamps",PackedVector3Array()):
+		if street_lights.size() >= 6: break
+		var lamp := OmniLight3D.new()
+		lamp.position = pos-Vector3.UP*.3
+		lamp.light_color = Color("ffd093")
+		lamp.omni_range = 12
+		lamp.shadow_enabled = false
+		lamp.visible = false
+		add_child(lamp)
+		street_lights.append(lamp)
+	traffic.positional_audio = false
 	traffic.vehicle_count = 9
 	traffic.citizen_count = 24
 	add_child(traffic)
@@ -68,6 +95,8 @@ func case_glass() -> void:
 	part(Vector3(0,-1.45,0),Vector3(100,.9,100),"c9ae87")
 	part(Vector3(0,-.52,0),Vector3(100,.99,100),"949080")
 	glass.shader = Glass
+	glass.set_shader_parameter("exposure",1.0)
+	glass.set_shader_parameter("studio",preload("res://cube/studio_small_09.hdr"))
 	glass.render_priority = 100
 	pane.mesh = BoxMesh.new()
 	pane.scale = Vector3.ONE * 101
@@ -84,7 +113,7 @@ func case_glass() -> void:
 	for axis in 3:
 		for a in [-50.5,50.5]:
 			for b in [-50.5,50.5]:
-				var size := Vector3.ONE*.24
+				var size := Vector3.ONE*.16
 				size[axis] = 101
 				var p := Vector3.ZERO
 				p[(axis+1)%3]=a
@@ -111,13 +140,41 @@ func set_spin(on: bool) -> void:
 func set_zoom(multiplier: float) -> void:
 	zoom_target = clampf(zoom_target*multiplier,.12,1.32)
 
+func is_night() -> bool:
+	return selected_time=="night" or selected_time=="evening"
+
+func change_time(key: String) -> void:
+	if not TIMES.has(key): return
+	selected_time = key
+	if transition: transition.kill()
+	transition = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var t: Array = TIMES[key]
+	transition.tween_property(sun,"rotation_degrees",t[0],.8)
+	transition.tween_property(sun,"light_color",t[1],.8)
+	transition.tween_property(env,"ambient_light_color",t[2],.8)
+	transition.tween_property(sun,"light_energy",t[3],.8)
+	transition.tween_property(env,"ambient_light_energy",t[4],.8)
+	transition.tween_property(env,"background_color",t[6],.8)
+	transition.tween_property(glass,"shader_parameter/exposure",.50 if key=="night" else 1.0,.8)
+	for room in room_lights: transition.tween_property(room,"emission_energy_multiplier",t[5],.8)
+	for lamp in street_lights:
+		if not lamp.visible: lamp.light_energy = 0
+		lamp.visible = true
+		transition.tween_property(lamp,"light_energy",float(t[5])*1.5,.8)
+	transition.finished.connect(func():
+		for lamp in street_lights: lamp.visible=is_night()
+	)
+
 func web_command(args: Array) -> void:
+	if TIMES.has(str(args[0])):
+		change_time(str(args[0]))
+		return
 	match str(args[0]):
 		"in": set_zoom(.84)
 		"out": set_zoom(1.19)
 		"spin": set_spin(not rotating)
 		"reset":
-			yaw=.66
+			yaw=-.48
 			pitch=.57
 			zoom_target=1
 			inspect_offset=Vector2.ZERO
@@ -172,7 +229,7 @@ func camera_pose() -> void:
 	var presence := smoothstep(.45,1.08,zoom_factor)
 	pane.visible = presence > .001
 	seams.visible = pane.visible
-	cut_edge.albedo_color = Color(.37,.62,.61,presence*.66)
+	cut_edge.albedo_color = Color(.45,.59,.56,presence*.44)
 	glass.set_shader_parameter("presence",presence)
 
 func _process(delta: float) -> void:

@@ -14,6 +14,7 @@ const DIRECTIONS := [Vector2i(0, 1), Vector2i(1, 0), Vector2i(0, -1), Vector2i(-
 const VEHICLES := ["Sedan", "Small", "Medium", "Taxi", "Van", "Muscle", "UAZ469"]
 const PEOPLE := ["Male_Hoodie", "Female_Jacket", "BusinessMan_Shirt", "BusinessWoman", "Male_Jacket", "Female_Coat", "BusinessMan_Suit"]
 
+var positional_audio := true
 @export var vehicle_count := 40
 @export var citizen_count := 88
 var city_map: Node3D
