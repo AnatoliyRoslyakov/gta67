@@ -15,7 +15,6 @@ var desired_engine_pitch := 0.6
 var is_compatibility := false
 var impact_cooldown := 0.0
 var drive_condition := 1.0
-var traffic_contacts := {}
 var wheels: Array[VehicleWheel3D] = []
 var _drive_force := 0.0
 var _damage_cooldown := 0.0
@@ -34,7 +33,6 @@ func _ready() -> void:
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_damage_cooldown = maxf(0.0, _damage_cooldown - state.step)
 
-	traffic_contacts.clear()
 	var strongest := 0.0
 	var own_closing_speed := 0.0
 	var hit_body: Node
@@ -47,24 +45,10 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var closing_speed := maxf(0.0, -relative.dot(normal))
 		var strength := absf(state.get_contact_impulse(index).dot(normal)) / maxf(mass, 1.0)
 		strength = maxf(strength, closing_speed)
-		var collider := state.get_contact_collider_object(index)
-		if strength > 1.5 and collider and collider.has_method("receive_contact"):
-			var point := state.get_contact_collider_position(index)
-			if not traffic_contacts.has(collider):
-				traffic_contacts[collider] = {"center": Vector3.ZERO, "push": Vector3.ZERO, "weight": 0.0, "peak": 0.0}
-			var patch: Dictionary = traffic_contacts[collider]
-			patch.center += point * strength
-			patch.push -= normal * strength
-			patch.weight += strength
-			patch.peak = maxf(patch.peak, strength)
 		if strength > strongest:
 			strongest = strength
 			own_closing_speed = maxf(0.0, -own_velocity.dot(normal))
 			hit_body = state.get_contact_collider_object(index) as Node
-	for target in traffic_contacts:
-		var patch: Dictionary = traffic_contacts[target]
-		var kick: Vector3 = patch.push.normalized() * minf(patch.peak * 0.65, 12.0)
-		target.call_deferred("receive_contact", kick, patch.center / patch.weight, get_instance_id())
 	if strongest > 2.5 and _damage_cooldown <= 0:
 		_damage_cooldown = 0.7
 		collision_impact.emit.call_deferred(strongest, hit_body, own_closing_speed)

@@ -22,6 +22,9 @@ var _lamp_positions: Array[Vector3] = []
 var _neon_sources: Array[Dictionary] = []
 var _street_lights: Array[SpotLight3D] = []
 var _neon_lights: Array[OmniLight3D] = []
+const SIGN_LAYER := 1 << 8
+var _room_masks: Array[ImageTexture] = []
+var _room_materials: Array[StandardMaterial3D] = []
 var _emission_materials: Array[StandardMaterial3D] = []
 var _road_materials: Array[StandardMaterial3D] = []
 var _cloud_materials: Array[StandardMaterial3D] = []
@@ -208,7 +211,9 @@ func _apply_time(force := false) -> void:
 	if force or absf(_night_amount - _last_material_night) > 0.002:
 		_last_material_night = _night_amount
 		for material in _emission_materials:
-			material.emission_energy_multiplier = lerpf(0.0, 2.35, _night_amount)
+			material.emission_energy_multiplier = 0.54 * _night_amount
+		for material in _room_materials:
+			material.emission_energy_multiplier = 0.82 * _night_amount
 		for material in _lamp_materials:
 			material.emission_energy_multiplier = lerpf(0.0, 1.15, _night_amount)
 		for material in _road_materials:
@@ -246,7 +251,11 @@ func _discover_fixtures() -> void:
 			var center: Vector3 = mesh.global_transform * mesh.get_aabb().get_center()
 			_neon_sources.append({"position": center, "color": color})
 			_neon_positions.append(center)
-			_override_materials(mesh, "neon", color)
+			mesh.layers = SIGN_LAYER
+			_override_materials(mesh, "neon", Color.WHITE)
+		elif ("SM_Bld_Apartment" in mesh_name or "SM_Bld_Office" in mesh_name) and "Glass" not in mesh_name:
+			var variant := posmod(hash(mesh.global_position.round()), 6)
+			_override_materials(mesh, "rooms%d" % variant, Color.WHITE)
 		elif mesh_name.begins_with("SM_Env_Road_Bare_") or mesh_name.begins_with("SM_Env_Road_0"):
 			_override_materials(mesh, "road", Color.WHITE)
 		elif "Glass" in mesh_name and mesh_name.begins_with("SM_Bld_"):
@@ -290,6 +299,7 @@ func _add_window_sign(window: MeshInstance3D) -> void:
 			_emission_materials.append(finish)
 			_window_letters.append(letters)
 	var sign_mesh := MeshInstance3D.new()
+	sign_mesh.layers = SIGN_LAYER
 	sign_mesh.mesh = _window_letters[_window_signs % _window_letters.size()]
 	sign_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sign_mesh.visibility_range_end = 75
@@ -305,6 +315,28 @@ func _is_neon_sign(mesh_name: String) -> bool:
 	return false
 
 
+# Residential and office models share three pane swatches in the bottom
+# strip of their UV atlas. The masonry, frames and sills sample black.
+func _room_mask(variant: int) -> ImageTexture:
+	if _room_masks.is_empty():
+		for layout in 6:
+			var mask := Image.create_empty(256, 256, false, Image.FORMAT_RGB8)
+			mask.fill(Color.BLACK)
+			var palette := [Color("ffd48b"), Color("e7bd8a"), Color("b2d2e1"), Color("171e2b")]
+			for pane in 3:
+				var color: Color = palette[(layout + pane * 3 + int(layout / 3) * pane) % 4]
+				for y in range(228, 256):
+					var shade := lerpf(0.48, 1.0, (y - 228) / 27.0)
+					var left := 128 + 28 * pane
+					mask.fill_rect(Rect2i(left, y, 28, 1), color.darkened(1.0 - shade))
+					# A partly drawn curtain breaks up broad uninterrupted office panes.
+					var curtain := 4 + (layout + pane) % 7
+					mask.fill_rect(Rect2i(left, y, curtain, 1), color.darkened(0.75))
+			mask.generate_mipmaps()
+			_room_masks.append(ImageTexture.create_from_image(mask))
+	return _room_masks[variant]
+
+
 func _override_materials(mesh: MeshInstance3D, category: String, tint: Color) -> void:
 	for surface in mesh.mesh.get_surface_count():
 		var original := mesh.get_active_material(surface) as StandardMaterial3D
@@ -317,10 +349,15 @@ func _override_materials(mesh: MeshInstance3D, category: String, tint: Color) ->
 			material = original.duplicate() as StandardMaterial3D
 			if category == "neon":
 				material.emission_enabled = true
-				material.emission = tint
+				material.emission = Color.BLACK
 				material.emission_texture = original.albedo_texture
 				material.emission_energy_multiplier = 0.0
 				_emission_materials.append(material)
+			elif category.begins_with("rooms"):
+				material.emission_enabled = true
+				material.emission = Color.BLACK
+				material.emission_texture = _room_mask(category.trim_prefix("rooms").to_int())
+				_room_materials.append(material)
 			elif category == "cloud":
 				# Imported clouds have unconditional white emission, even at midnight.
 				material.emission_enabled = false
@@ -393,7 +430,8 @@ func _create_light_pools() -> void:
 		_street_source_ids.append(-1)
 	for _i in nearby_neon_budget:
 		var light := OmniLight3D.new()
-		light.omni_range = 8.0
+		light.light_cull_mask &= ~SIGN_LAYER
+		light.omni_range = 6.0
 		light.omni_attenuation = 1.7
 		light.shadow_enabled = false
 		light.distance_fade_enabled = true
@@ -467,7 +505,7 @@ func _assign_sources(lights: Array, slots: Array[int], selected: Array[int], pos
 
 func _update_light_energy() -> void:
 	for light in _street_lights: light.light_energy = 2.6 * _night_amount
-	for light in _neon_lights: light.light_energy = 1.4 * _night_amount
+	for light in _neon_lights: light.light_energy = 0.55 * _night_amount
 
 
 func _create_probe() -> void:

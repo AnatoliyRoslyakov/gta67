@@ -37,6 +37,7 @@ func setup(car: Node3D, back_callback: Callable, reflections: bool) -> void:
 		if "Skydome" in str(node.name): node.free()
 	$CityMap/Road_Cars/SM_Veh_Car_Sedan_01.free()
 	player_body = car.get_child(0)
+	player_body.add_to_group("driveable_cars")
 	player_body.turbometer = %Turbometer
 	player_body.turbo_animator = %TurboAnimator
 	%Speedometer.car_body = player_body
@@ -134,7 +135,7 @@ func _physics_process(delta: float) -> void:
 	gta_hud.speed = player_body.linear_velocity.length() * 3.6
 	gta_hud.boost_value = %Turbometer.value / %Turbometer.max_value
 	gta_hud.hint = "E — выйти   C — камера   ПКМ + мышь — обзор" if driving else "E — сесть   C — камера   Q — оружие   ПКМ — прицел"
-	if not driving and character.global_position.distance_to(player_body.global_position) >= 4:
+	if not driving and _nearest_car() == null:
 		gta_hud.hint = "Shift — бег   C — камера   Q — оружие   ПКМ — прицел"
 	if not driving and character.reload_time > 0: gta_hud.hint = "ПЕРЕЗАРЯДКА…"
 	if is_instance_valid(character.mount):
@@ -190,12 +191,15 @@ func _interact() -> void:
 		_set_subject(character)
 		await get_tree().create_timer(0.35).timeout
 		transition = false
-	elif character.global_position.distance_to(player_body.global_position) < 4:
-		var sight := PhysicsRayQueryParameters3D.create(character.global_position + Vector3.UP, player_body.global_position + Vector3.UP, 1 | 4 | 8, [character.get_rid(), player_body.get_rid()])
+	else:
+		var target := _nearest_car()
+		if target == null: return
+		var sight := PhysicsRayQueryParameters3D.create(character.global_position + Vector3.UP, target.global_position + Vector3.UP, 1 | 4 | 8, [character.get_rid(), target.get_rid()])
 		if not get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
 			_status("Подойдите к свободной двери")
 			return
 		transition = true
+		if target != player_body: _take_car(target)
 		character.set_active(false)
 		player_body.set_controlled(true)
 		driving = true
@@ -203,6 +207,85 @@ func _interact() -> void:
 		_set_subject(player_body)
 		await get_tree().create_timer(0.35).timeout
 		transition = false
+
+func _nearest_car() -> RigidBody3D:
+	var candidates := get_tree().get_nodes_in_group("driveable_cars")
+	candidates.append_array(get_tree().get_nodes_in_group("parked_vehicles"))
+	if is_instance_valid(traffic): candidates.append_array(traffic.nearby_drivers(character.global_position, 5.0))
+	var nearest: RigidBody3D
+	var best := 2.5 * 2.5
+	for car: RigidBody3D in candidates:
+		if car.is_queued_for_deletion() or character.global_position.distance_squared_to(car.global_position) > 25: continue
+		var local := car.to_local(character.global_position)
+		var distance := Vector3(absf(local.x) - 1.0, local.y, local.z - 0.35).length_squared()
+		if distance < best:
+			nearest = car
+			best = distance
+	return nearest
+
+
+func _take_car(target: RigidBody3D) -> void:
+	var old := player_body
+	var health := float(target.get_meta("body_health", 100.0))
+	if target.is_in_group("traffic"): health = clampf(100.0 - target.damage, 0, 100)
+	old.set_meta("body_health", vehicle_health)
+	gameplay.progress.vehicle_health[gameplay.vehicle_key] = vehicle_health
+	old.collision_impact.disconnect(gameplay._on_vehicle_impact)
+	old.shot_damage.disconnect(gameplay._damage_vehicle)
+	if target is VehicleBody3D:
+		player_body = target
+	else:
+		player_body = _convert_city_car(target)
+	player_body.turbometer = %Turbometer
+	player_body.turbo_animator = %TurboAnimator
+	%Speedometer.car_body = player_body
+	player_body.collision_impact.connect(gameplay._on_vehicle_impact)
+	player_body.shot_damage.connect(gameplay._damage_vehicle)
+	gameplay.vehicle_key = player_body.vehicle_scene.resource_path.get_file().get_basename()
+	vehicle_health = health
+	player_body.drive_condition = health / 100.0
+	player_body.set_headlights(atmosphere.is_night())
+
+
+func _convert_city_car(target: RigidBody3D) -> VehicleBody3D:
+	var pose := target.global_transform
+	var travel := target.linear_velocity
+	var spin := target.angular_velocity
+	var source: PackedScene
+	var paint: Material
+	if target.is_in_group("traffic"):
+		source = target.model_scene
+		paint = target.model.get_active_material(0)
+		traffic.drivers.erase(target)
+		for i in traffic.junctions.size():
+			if traffic.junctions[i].owner == target: traffic._release_junction(i)
+		if target.is_in_group("police"):
+			gameplay.police.units.erase(target)
+			if gameplay.police._audible_unit == target: gameplay.police._audible_unit = null
+	else:
+		for child in target.get_children():
+			if child is MeshInstance3D:
+				source = load(child.scene_file_path)
+				paint = child.get_active_material(0)
+				break
+	target.collision_layer = 0
+	target.collision_mask = 0
+	target.get_parent().remove_child(target)
+	target.queue_free()
+	var car := load("res://vehicles/car_base.tscn").instantiate() as Node3D
+	var driveable := car.get_child(0) as VehicleBody3D
+	driveable.set_script(preload("res://vehicles/polygon_vehicle.gd"))
+	driveable.vehicle_scene = source
+	driveable.controllable = false
+	car.transform = global_transform.affine_inverse() * pose
+	add_child(car)
+	if paint: driveable.get_node("PolygonModel").set_surface_override_material(0, paint)
+	driveable.linear_velocity = travel
+	driveable.angular_velocity = spin
+	driveable.add_to_group("driveable_cars")
+	driveable.reset_physics_interpolation()
+	return driveable
+
 
 func _safe_exit() -> Vector3:
 	var space := get_world_3d().direct_space_state

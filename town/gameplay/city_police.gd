@@ -9,7 +9,7 @@ const MODEL = preload("res://Assets/Synty/PolygonCity/Prefabs/Vehicles/SM_Veh_Ca
 const SEARCH_SECONDS := 18.0
 const ARREST_SECONDS := 4.0
 var town: Node3D
-var units: Array[CharacterBody3D] = []
+var units: Array[RigidBody3D] = []
 var level := 0
 var seen := false
 var last_known := Vector3.ZERO
@@ -23,7 +23,7 @@ var _search_index := 0
 var _busted_emitted := false
 var _was_seen := false
 var rng := RandomNumberGenerator.new()
-var _audible_unit: CharacterBody3D
+var _audible_unit: RigidBody3D
 var _lane_states: Array[Vector3i] = []
 var _lane_positions: Dictionary = {}
 var _reverse_lanes: Dictionary = {}
@@ -147,7 +147,7 @@ func _subject() -> Node3D:
 func _retire_extra_units() -> void:
 	var subject := _subject()
 	while units.size() > level:
-		var furthest: CharacterBody3D
+		var furthest: RigidBody3D
 		var distance := -1.0
 		for unit in units:
 			if not is_instance_valid(unit): continue
@@ -164,7 +164,7 @@ func _retire_extra_units() -> void:
 func _sense_subject() -> void:
 	var subject := _subject()
 	seen = false
-	var closest: CharacterBody3D
+	var closest: RigidBody3D
 	var closest_distance := INF
 	for unit in units:
 		if not is_instance_valid(unit) or unit.damage > 70: continue
@@ -194,7 +194,7 @@ func _sense_subject() -> void:
 		unit.near_player = unit == light_unit
 
 
-func _can_see(unit: CharacterBody3D, subject: Node3D) -> bool:
+func _can_see(unit: RigidBody3D, subject: Node3D) -> bool:
 	if not is_instance_valid(subject) or unit.damage > 70: return false
 	var from := unit.global_position + Vector3.UP * 1.2
 	var to := subject.global_position + Vector3.UP * 0.9
@@ -351,7 +351,7 @@ func _route_reachable(start: Vector3i, destination: Vector3) -> Array[Vector3i]:
 	return result
 
 
-func _search_destination(unit: CharacterBody3D) -> Vector3:
+func _search_destination(unit: RigidBody3D) -> Vector3:
 	var options: Array[Vector3] = []
 	for state: Vector3i in _lane_states:
 		var point: Vector3 = _lane_positions[state]

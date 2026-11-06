@@ -24,7 +24,7 @@ var sidewalk_cells: Dictionary = {}
 var walk_neighbors: Dictionary = {}
 var crossing_edges: Dictionary = {}
 var signals: Array[Node3D] = []
-var drivers: Array[CharacterBody3D] = []
+var drivers: Array[RigidBody3D] = []
 var citizens: Array[CharacterBody3D] = []
 var parked_count := 0
 var _signal_second := -1
@@ -110,9 +110,9 @@ func _rebuild_driver_index() -> void:
 	_indexed_driver_count = drivers.size()
 
 
-func nearby_drivers(origin: Vector3, radius: float) -> Array[CharacterBody3D]:
+func nearby_drivers(origin: Vector3, radius: float) -> Array[RigidBody3D]:
 	if _indexed_driver_count != drivers.size(): _rebuild_driver_index()
-	var found: Array[CharacterBody3D] = []
+	var found: Array[RigidBody3D] = []
 	# Covers 0.1 s of movement at the fastest police speed. Positions are filtered live.
 	var reach := radius + 2.5
 	var minimum := Vector2i(floori((origin.x - reach) / DRIVER_BUCKET_SIZE), floori((origin.z - reach) / DRIVER_BUCKET_SIZE))
@@ -425,7 +425,7 @@ func choose_lane(state: Vector3i) -> Vector3i:
 	return options[rng.randi_range(0, options.size() - 1)]
 
 
-func may_enter(actor: CharacterBody3D, from: Vector3i, to: Vector3i) -> bool:
+func may_enter(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> bool:
 	var index: int = junction_cells.get(Vector2i(to.x, to.y), -1)
 	if index < 0: return true
 	_refresh_junction(index)
@@ -451,7 +451,7 @@ func may_enter(actor: CharacterBody3D, from: Vector3i, to: Vector3i) -> bool:
 	return true
 
 
-func approach_speed(actor: CharacterBody3D, from: Vector3i, to: Vector3i) -> float:
+func approach_speed(actor: RigidBody3D, from: Vector3i, to: Vector3i) -> float:
 	var forward: Vector2i = DIRECTIONS[to.z]
 	for ahead in 3:
 		var cell := Vector2i(to.x, to.y) + forward * ahead
@@ -483,10 +483,20 @@ func may_cross(a: Vector2i, b: Vector2i) -> bool:
 	if phase < 30 or phase >= 36: return false
 	var start := walk_position(a)
 	var end := walk_position(b)
-	for driver in nearby_drivers((start + end) * 0.5, start.distance_to(end) * 0.5 + 3.2):
-		if _distance_to_crossing(driver.global_position, start, end) < 3.2: return false
-	if is_instance_valid(subject) and _distance_to_crossing(subject.global_position, start, end) < 3.2: return false
+	# A person checks approaching vehicles before stepping off the curb, including
+	# a player approaching on red. Once committed they keep their reservation.
+	for driver in nearby_drivers((start + end) * 0.5, start.distance_to(end) * 0.5 + 26.0):
+		if _will_reach_crosswalk(driver, start, end): return false
+	if subject is RigidBody3D and _will_reach_crosswalk(subject, start, end): return false
 	return true
+
+
+func _will_reach_crosswalk(car: RigidBody3D, start: Vector3, end: Vector3) -> bool:
+	var position_xz := Vector2(car.global_position.x, car.global_position.z)
+	var travel := Vector2(car.linear_velocity.x, car.linear_velocity.z) * 1.8
+	if travel.length_squared() < 0.1: return _distance_to_crossing(car.global_position, start, end) < 2.3
+	var closest := Geometry2D.get_closest_points_between_segments(position_xz, position_xz + travel, Vector2(start.x, start.z), Vector2(end.x, end.z))
+	return closest[0].distance_squared_to(closest[1]) < 2.3 * 2.3
 
 
 func _distance_to_crossing(p: Vector3, a: Vector3, b: Vector3) -> float:

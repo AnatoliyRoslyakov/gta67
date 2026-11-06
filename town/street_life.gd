@@ -86,7 +86,7 @@ func _process(delta: float) -> void:
 	if paper.amount != budget:
 		paper.amount = budget
 		paper.fixed_fps = 12 if CityPerformance.quality == 0 else 20
-	var closest: CharacterBody3D
+	var closest: RigidBody3D
 	var best := 900.0
 	for car in world.nearby_drivers(origin, 32.0):
 		var d: float = origin.distance_squared_to(car.global_position)

@@ -1,12 +1,11 @@
-extends CharacterBody3D
+extends RigidBody3D
 
 static var lamp_mesh_cache: Dictionary = {}
-var slide_velocity := Vector3.ZERO
-var spin_rate := 0.0
+var grounded := false
+var grip_recovery := 0.0
 var _plan_target := Vector3.ZERO
 var _plan_speed := 0.0
 var _plan_turn := false
-var _contact_timers: Dictionary = {}
 var body_faces := PackedVector3Array()
 var body_bounds := AABB()
 
@@ -34,6 +33,7 @@ var brake_lights: Array[MeshInstance3D] = []
 var turn_lights: Array[MeshInstance3D] = []
 var damage := 0.0
 var wheel_distance := 0.0
+var _fixed_obstruction := false
 var blocked_seconds := 0.0
 var queue_release_delay := 0.0
 var _traffic_sensor_tick := 0.0
@@ -48,6 +48,15 @@ var _traffic_night_initialized := false
 
 
 func _ready() -> void:
+	mass = 2000 if "Van" in model_scene.resource_path else (1050 if "Small" in model_scene.resource_path else 1450)
+	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = Vector3.UP * 0.42
+	continuous_cd = true
+	max_contacts_reported = 8
+	physics_material_override = PhysicsMaterial.new()
+	physics_material_override.friction = 0.055
+	linear_damp = 0.04
+	angular_damp = 0.35
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4 | 8
 	add_to_group("traffic")
@@ -85,8 +94,7 @@ func _ready() -> void:
 			part.reparent(pivot, false)
 			part.transform = Transform3D(original.basis, original.origin - center)
 			wheel_visuals.append({"pivot": pivot, "mesh": part, "radius": radius, "front": front})
-	# The original collider bottom was 0.325 m above the tire bottoms,
-	# making CharacterBody3D settle the visible wheels beneath the road.
+	# Put the hull underside at tire height so the visual wheels meet the street.
 	collider.position.y = (tire_floor if is_finite(tire_floor) else 0.0) + shape.size.y * 0.5
 	next_state = world.choose_lane(state)
 	following_state = world.choose_lane(next_state)
@@ -174,6 +182,9 @@ func _physics_process(delta: float) -> void:
 	var turning := _plan_turn
 	if desired > 1.5 and _traffic_obstacle_speed < 0.6 and speed < 0.8 and damage < 70:
 		blocked_seconds += delta
+		if blocked_seconds > 4.5 and _fixed_obstruction:
+			_try_open_branch()
+			blocked_seconds = 0.0
 	else:
 		blocked_seconds = 0.0
 	desired = minf(desired, _traffic_obstacle_speed)
@@ -263,36 +274,61 @@ func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
 	var curvature := absf(tan(steering_angle) / wheelbase)
 	desired = minf(desired, sqrt(2.8 / maxf(curvature, 0.01)))
 	if absf(error) > PI * 0.55: desired = minf(desired, 1.2)
+	var forward := global_basis.z.slide(Vector3.UP).normalized()
+	var right := forward.cross(Vector3.DOWN)
+	var signed_speed := linear_velocity.dot(forward)
+	speed = maxf(0.0, signed_speed)
 	var braking := desired < speed - 0.3
-	speed = move_toward(speed, desired, delta * (6.5 if braking else acceleration))
-	var yaw_rate := speed / wheelbase * tan(steering_angle)
-	rotation.y += (yaw_rate + spin_rate) * delta
-	velocity.x = global_basis.z.x * speed + slide_velocity.x
-	velocity.z = global_basis.z.z * speed + slide_velocity.z
-	velocity.y = velocity.y - 20.0 * delta if not is_on_floor() else 0.0
-	var incoming := velocity
-	move_and_slide()
-	slide_velocity = slide_velocity.move_toward(Vector3.ZERO, 5.5 * delta)
-	spin_rate = move_toward(spin_rate, 0.0, 2.6 * delta)
-	for i in get_slide_collision_count():
-		var hit := get_slide_collision(i)
-		var normal := hit.get_normal()
-		if absf(normal.y) > 0.65: continue
-		var other := hit.get_collider() as CollisionObject3D
-		var closing := -(incoming - hit.get_collider_velocity()).dot(normal)
-		if closing > 4.0 and other and other.collision_layer == 2 and other.has_method("receive_hit"):
-			other.receive_hit((closing - 3.0) * 5.0, -normal)
-		if closing > 1.5 and other and other.has_method("receive_contact"):
-			other.receive_contact(-normal * closing * 0.55, hit.get_position(), get_instance_id())
-			receive_contact(normal * closing * 0.55, hit.get_position(), other.get_instance_id())
-		if slide_velocity.dot(normal) < 0.0: slide_velocity = slide_velocity.slide(normal)
-		speed = minf(speed, maxf(0.0, velocity.dot(global_basis.z)))
-	wheel_distance += speed * delta
+	grip_recovery = maxf(0.0, grip_recovery - delta)
+	if grounded and global_basis.y.y > 0.45:
+		# Tire forces are bounded. The collision solver owns velocity and momentum.
+		var grip := 0.22 if grip_recovery > 0.0 else 1.0
+		var drive := clampf((desired - signed_speed) * 2.0, -6.8, acceleration)
+		var side := clampf(-linear_velocity.dot(right) * 4.0, -5.2, 5.2)
+		if absf(drive) + absf(side) > 0.04:
+			apply_central_force((forward * drive + right * side) * mass * grip)
+		var target_yaw := signed_speed / wheelbase * tan(steering_angle)
+		var yaw_accel := clampf((target_yaw - angular_velocity.y) * 5.0, -2.4, 2.4)
+		if absf(yaw_accel) > 0.015:
+			apply_torque(Vector3.UP * yaw_accel * mass * (body_bounds.size.z ** 2 + body_bounds.size.x ** 2) / 12.0 * grip)
+	wheel_distance += signed_speed * delta
 	return braking
+
+
+func _integrate_forces(physics: PhysicsDirectBodyState3D) -> void:
+	grounded = false
+	for i in physics.get_contact_count():
+		var normal := physics.get_contact_local_normal(i)
+		if normal.y > 0.55:
+			grounded = true
+		elif absf(normal.y) < 0.5:
+			var impulse := physics.get_contact_impulse(i).length() / mass
+			var fresh_impact := grip_recovery <= 0.0
+			if impulse > 0.8: grip_recovery = 0.65
+			var other := physics.get_contact_collider_object(i)
+			if other is CharacterBody3D and other.has_method("receive_hit") and speed > 3.0 and fresh_impact:
+				other.call_deferred("receive_hit", (speed - 2.0) * 4.0, -normal)
+				grip_recovery = 0.65
+
+
+func _try_open_branch() -> void:
+	if global_position.distance_squared_to(world.lane_position(state)) > 3.5 ** 2: return
+	for branch: Vector3i in world.lanes.get(state, []):
+		if branch == next_state: continue
+		var toward: Vector3 = world.lane_position(branch) - global_position
+		if toward.dot(global_basis.z) < -1.0: continue
+		if _sense_obstacles(toward.normalized(), 7.0) < 2.0: continue
+		if not world.may_enter(self, state, branch): continue
+		next_state = branch
+		following_state = world.choose_lane(next_state)
+		_traffic_sensor_tick = 0.0
+		_turn_points.clear()
+		return
 
 
 func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 	var limit := INF
+	_fixed_obstruction = false
 	var origin := global_position
 	# Braking gaps include travel between sensor samples; collision movement still runs at every physics tick.
 	var reaction_margin := maxf(speed, cruise_speed) * 0.05
@@ -301,8 +337,11 @@ func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 		var relative: Vector3 = other.global_position - origin
 		var ahead := relative.dot(direction)
 		var lateral := absf(relative.x * direction.z - relative.z * direction.x)
+		var lead_speed := maxf(0.0, other.linear_velocity.dot(direction))
 		if ahead > 0 and ahead < lookahead and lateral < 2.1:
-			limit = minf(limit, maxf(0, (ahead - body_bounds.size.z * 0.5 - other.body_bounds.size.z * 0.5 - 1.8 - reaction_margin) / following_time))
+			var gap: float = ahead - 0.5 * (body_bounds.size.z + other.body_bounds.size.z)
+			var desired_gap := 2.0 + speed * following_time + reaction_margin
+			limit = minf(limit, maxf(0, lead_speed + (gap - desired_gap) / following_time))
 	for i in 3:
 		var ray := _traffic_ray if i == 1 else _side_rays[0 if i == 0 else 1]
 		ray.from = origin + Vector3.UP + global_basis.x * ((i - 1) * body_bounds.size.x * 0.35)
@@ -310,7 +349,12 @@ func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 		var hit := get_world_3d().direct_space_state.intersect_ray(ray)
 		if not hit.is_empty():
 			var gap: float = ray.from.distance_to(hit.position)
-			limit = minf(limit, maxf(0, (gap - body_bounds.size.z * 0.5 - 1.3 - reaction_margin) / 1.5))
+			var obstacle := hit.collider as RigidBody3D
+			if gap < body_bounds.size.z * 0.5 + 3.0 and (hit.collider is StaticBody3D or hit.collider.is_in_group("parked_vehicles")):
+				_fixed_obstruction = true
+			var moving_speed := maxf(0.0, obstacle.linear_velocity.dot(direction)) if obstacle else 0.0
+			var room := maxf(0.0, gap - body_bounds.size.z * 0.5 - 1.6 - reaction_margin)
+			limit = minf(limit, sqrt(moving_speed * moving_speed + 7.0 * room))
 	return limit
 
 
@@ -340,20 +384,6 @@ func _update_night_lights() -> void:
 		if other_distance < distance or (is_equal_approx(other_distance, distance) and other.get_instance_id() < get_instance_id()): nearer += 1
 		if nearer >= 4: break
 	headlight_beam.visible = nearer < 4
-
-
-func receive_contact(kick: Vector3, point: Vector3, source: int) -> void:
-	var tick := Time.get_ticks_msec()
-	if tick < int(_contact_timers.get(source, 0)): return
-	for key in _contact_timers.keys():
-		if _contact_timers[key] <= tick: _contact_timers.erase(key)
-	_contact_timers[source] = tick + 180
-	kick.y = 0
-	slide_velocity = (slide_velocity + kick).limit_length(14)
-	var lever := point - global_position
-	var inertia := maxf(1.0, (body_bounds.size.x ** 2 + body_bounds.size.z ** 2) / 12.0)
-	spin_rate = clampf(spin_rate + lever.cross(kick).y / inertia, -3.2, 3.2)
-	speed *= 1.0 - clampf(kick.length() / 22.0, 0.0, 0.65)
 
 
 func receive_hit(amount: float, _direction: Vector3) -> void:

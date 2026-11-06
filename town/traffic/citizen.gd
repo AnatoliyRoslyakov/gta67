@@ -29,6 +29,8 @@ var _walk_direction := Vector3.ZERO
 var _desired_speed := 0.0
 var _can_walk := false
 var _obstructed := false
+var _passing_time := 0.0
+var _passing_side := 1.0
 var _obstacle_ray: PhysicsRayQueryParameters3D
 var _crossing_target := -1
 
@@ -89,6 +91,7 @@ func _physics_process(delta: float) -> void:
 	idle_time = maxf(0, idle_time - delta)
 	flee_time = maxf(0, flee_time - delta)
 	knockdown = maxf(0, knockdown - delta)
+	_passing_time = maxf(0, _passing_time - delta)
 	_sensor_tick -= delta
 	if _sensor_tick <= 0.0:
 		_plan_walk()
@@ -133,7 +136,23 @@ func _plan_walk() -> void:
 		var stopping_distance := _desired_speed * _desired_speed / 12.0 + _desired_speed / 12.0 + 0.35
 		_obstacle_ray.from = global_position + Vector3.UP
 		_obstacle_ray.to = _obstacle_ray.from + _walk_direction * maxf(0.9, stopping_distance)
-		_obstructed = not get_world_3d().direct_space_state.intersect_ray(_obstacle_ray).is_empty()
+		var space := get_world_3d().direct_space_state
+		var hit := space.intersect_ray(_obstacle_ray)
+		_obstructed = not hit.is_empty()
+		if crossing_junction < 0 and _crossing_target < 0 and (_obstructed or _passing_time > 0):
+			# Prefer the right side relative to travel, allowing oncoming walkers to pass.
+			for side: float in [_passing_side, -_passing_side]:
+				var pass_direction := _walk_direction.rotated(Vector3.UP, -side * 0.98)
+				var probe := global_position + pass_direction * 1.05
+				var cell_ahead := Vector2i(floori(probe.x / world.WALK_CELL), floori(probe.z / world.WALK_CELL))
+				if not world.sidewalk_cells.has(cell_ahead): continue
+				_obstacle_ray.to = _obstacle_ray.from + pass_direction * 1.05
+				if not space.intersect_ray(_obstacle_ray).is_empty(): continue
+				_walk_direction = pass_direction
+				if _obstructed: _passing_time = 0.45
+				_passing_side = side
+				_obstructed = false
+				break
 	if _obstructed: _can_walk = false
 	if not _can_walk: _desired_speed = 0
 
