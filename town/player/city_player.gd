@@ -30,9 +30,14 @@ var hand_anchor: Node3D
 var jump_buffer := 0.0
 var coyote_time := 0.0
 var recoil := 0.0
-var head_bob := 0.0
+var tracer := MeshInstance3D.new()
+var view_slide: Node3D
+var world_slide: Node3D
+var landing_dip := 0.0
 var health := 100.0
 var saved_collision_layer := 2
+var _step_obstruction := KinematicCollision3D.new()
+var _step_support := KinematicCollision3D.new()
 var _step_visual_offset := 0.0
 var _hurt_cooldown := 0.0
 var _invulnerable_until_msec := 0
@@ -100,6 +105,8 @@ func set_active(value: bool) -> void:
 	_step_visual_offset = 0.0
 	visual.position.y = 0.0
 	if not value:
+		tracer.hide()
+		fire_time = 0.0
 		aiming = false
 		muzzle.light_energy = 0.0
 		world_muzzle.light_energy = 0.0
@@ -130,6 +137,7 @@ func _physics_process(delta: float) -> void:
 	yaw -= look.x
 	pitch = clampf(pitch - look.y, -1.1, 1.0)
 	if is_instance_valid(mount):
+		tracer.hide()
 		_update_riding(delta)
 		return
 	_hurt_cooldown = maxf(0.0, _hurt_cooldown - delta)
@@ -137,6 +145,7 @@ func _physics_process(delta: float) -> void:
 	recoil = move_toward(recoil, 0, delta * 7)
 	muzzle.light_energy = 3 if fire_time > 0.18 else 0
 	world_muzzle.light_energy = muzzle.light_energy
+	if fire_time <= 0.185: tracer.hide()
 	if reload_time > 0:
 		reload_time -= delta
 		if reload_time <= 0:
@@ -148,8 +157,12 @@ func _physics_process(delta: float) -> void:
 	var direction := Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y)
 	var running := Input.is_action_pressed("boost") and not aiming
 	var speed := 6.4 if running else (1.5 if aiming else 1.8)
-	velocity.x = move_toward(velocity.x, direction.x * speed, 18 * delta)
-	velocity.z = move_toward(velocity.z, direction.z * speed, 18 * delta)
+	var planar := Vector3(velocity.x, 0, velocity.z)
+	var acceleration := 13.0 if direction.length_squared() > 0.01 else 17.0
+	if not is_on_floor(): acceleration = 3.5
+	planar = planar.move_toward(direction * speed, acceleration * delta)
+	velocity.x = planar.x
+	velocity.z = planar.z
 	jump_buffer = maxf(0.0, jump_buffer - delta)
 	coyote_time = 0.1 if is_on_floor() else maxf(0.0, coyote_time - delta)
 	if not is_on_floor(): velocity.y -= 20 * delta
@@ -162,6 +175,9 @@ func _physics_process(delta: float) -> void:
 	var landing_speed := velocity.y
 	var incoming_velocity := velocity
 	move_and_slide()
+	landing_dip = move_toward(landing_dip, 0.0, delta * 0.32)
+	if is_on_floor() and landing_speed < -3.0:
+		landing_dip = minf(0.09, -landing_speed * 0.009)
 	if is_on_floor() and landing_speed < -10:
 		receive_hit((-landing_speed - 10.0) * 5.0, Vector3.ZERO)
 	for index in get_slide_collision_count():
@@ -170,24 +186,28 @@ func _physics_process(delta: float) -> void:
 		if is_instance_valid(other) and other.is_in_group("traffic"):
 			var relative_velocity := incoming_velocity - collision.get_collider_velocity()
 			var closing_speed := maxf(0.0, -relative_velocity.dot(collision.get_normal()))
-			if closing_speed > 4: receive_hit((closing_speed - 3.0) * 5.0, Vector3.ZERO)
+			if closing_speed > 4: receive_hit((closing_speed - 3.0) * 5.0, collision.get_normal())
 	visual.position.y = _step_visual_offset
-	var horizontal := Vector2(velocity.x, velocity.z).length()
+	var actual := get_real_velocity()
+	var horizontal := Vector2(actual.x, actual.z).length()
 	if weapon_drawn or first_person: visual.rotation.y = lerp_angle(visual.rotation.y, yaw + PI, 1.0 - exp(-delta * 14.0))
 	elif horizontal > 0.1: visual.rotation.y = lerp_angle(visual.rotation.y, atan2(velocity.x, velocity.z), delta * 10)
-	var local_velocity := visual.global_basis.inverse() * Vector3(velocity.x, 0.0, velocity.z)
+	var local_velocity := visual.global_basis.inverse() * Vector3(actual.x, 0.0, actual.z)
 	motion.update(delta, horizontal, running, weapon_drawn, pitch, aiming, is_on_floor(), reload_time > 0.0, Vector2(local_velocity.x, local_velocity.z))
 	visual.visible = not first_person
 	pivot.rotation = Vector3(pitch + recoil * 0.03, yaw, 0)
-	arm.spring_length = 0 if first_person else (2.2 if aiming else 3.8)
+	arm.spring_length = 0.0 if first_person else lerpf(arm.spring_length, 2.2 if aiming else 3.8, 1.0 - exp(-delta * 12.0))
 	arm.position.x = 0 if first_person else (0.48 if aiming else 0.3)
-	head_bob += delta * horizontal * 1.9
-	pivot.position.y = 1.62 + _step_visual_offset + (sin(head_bob) * 0.016 if first_person and is_on_floor() else 0)
+	pivot.position.y = 1.62 + _step_visual_offset - landing_dip
+	if first_person and is_on_floor(): pivot.position.y += cos(motion.phase * 2.0) * 0.012 * motion.blend
 	camera.fov = lerpf(camera.fov, 58 if aiming else (77 if running else 72), 1 - exp(-delta * 9))
 	weapon.visible = weapon_drawn and first_person
 	world_weapon.visible = weapon_drawn and not first_person
 	weapon.position = Vector3(0.16 if aiming else 0.26, -0.19 - (0.15 if reload_time > 0 else 0), -0.48 + recoil * 0.07)
-	weapon.rotation.x = -0.65 if reload_time > 0 else recoil * 0.1
+	weapon.rotation.x = lerpf(weapon.rotation.x, -0.65 if reload_time > 0 else recoil * 0.1, 1.0 - exp(-delta * 24.0))
+	var slide_offset := 0.029 * smoothstep(0.38, 1.0, recoil)
+	view_slide.position.z = slide_offset
+	world_slide.position.z = slide_offset
 	_update_world_weapon()
 
 func mount_gary(snail: CharacterBody3D) -> void:
@@ -237,7 +257,7 @@ func _try_step_up(delta: float) -> void:
 	if not is_on_floor() or velocity.y > 0.1: return
 	var movement := Vector3(velocity.x, 0.0, velocity.z) * delta
 	if movement.length_squared() < 0.00001: return
-	var obstruction := KinematicCollision3D.new()
+	var obstruction := _step_obstruction
 	if not test_move(global_transform, movement, obstruction, 0.001): return
 	var found_step := false
 	for index in obstruction.get_collision_count():
@@ -254,7 +274,7 @@ func _try_step_up(delta: float) -> void:
 	if test_move(raised, probe, null, 0.001): return
 	var landing := raised
 	landing.origin += probe
-	var support := KinematicCollision3D.new()
+	var support := _step_support
 	if not test_move(landing, Vector3.DOWN * (STEP_HEIGHT + 0.04), support, 0.001): return
 	var floor_body := support.get_collider()
 	if not floor_body is StaticBody3D or (floor_body.collision_layer & 1) == 0: return
@@ -274,10 +294,12 @@ func reload_weapon() -> void:
 func grant_invulnerability(seconds: float) -> void:
 	_invulnerable_until_msec = maxi(_invulnerable_until_msec, Time.get_ticks_msec() + ceili(maxf(0.0, seconds) * 1000.0))
 
-func receive_hit(amount: float, _direction: Vector3) -> void:
+func receive_hit(amount: float, direction: Vector3) -> void:
 	if amount <= 0 or (active and _hurt_cooldown > 0) or health <= 0: return
 	if Time.get_ticks_msec() < _invulnerable_until_msec: return
 	_hurt_cooldown = 0.8 if active else 0.0
+	if active and not direction.is_zero_approx():
+		velocity += direction.normalized() * clampf(amount * 0.11, 0.0, 5.5)
 	health = maxf(0.0, health - amount)
 	if health <= 0: incapacitated.emit.call_deferred()
 
@@ -312,12 +334,19 @@ func shoot() -> void:
 	if not hit.is_empty():
 		destination = hit.position
 		collider = hit.collider
+		if collider is RigidBody3D:
+			collider.apply_impulse((destination - from).normalized() * 3.2, destination - collider.global_position)
 		if collider.has_method("receive_hit"): collider.receive_hit(25, (destination - from).normalized())
 	fired.emit(from, destination, collider)
 	if from.distance_to(destination) < 0.01: return
-	var tracer := MeshInstance3D.new()
+	tracer.global_transform = Transform3D(Basis.IDENTITY, from.lerp(destination, 0.5))
+	tracer.look_at(destination, Vector3.RIGHT if absf((destination - from).normalized().y) > 0.99 else Vector3.UP)
+	tracer.scale.z = from.distance_to(destination)
+	tracer.show()
+
+func _build_weapon() -> void:
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.008, 0.008, from.distance_to(destination))
+	mesh.size = Vector3(0.008, 0.008, 1.0)
 	tracer.mesh = mesh
 	tracer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var material := StandardMaterial3D.new()
@@ -325,12 +354,9 @@ func shoot() -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.albedo_color = Color(1, 0.8, 0.5, 0.65)
 	tracer.material_override = material
-	get_parent().add_child(tracer)
-	tracer.global_position = from.lerp(destination, 0.5)
-	tracer.look_at(destination)
-	get_tree().create_timer(0.045).timeout.connect(tracer.queue_free)
-
-func _build_weapon() -> void:
+	tracer.top_level = true
+	add_child(tracer)
+	tracer.hide()
 	weapon = _create_pistol(camera, true)
 	muzzle = weapon.get_node("Muzzle")
 	hand_anchor = Node3D.new()
@@ -338,6 +364,8 @@ func _build_weapon() -> void:
 	skeleton.add_child(hand_anchor)
 	world_weapon = _create_pistol(hand_anchor, false)
 	world_muzzle = world_weapon.get_node("Muzzle")
+	view_slide = weapon.find_child("Slide", true, false)
+	world_slide = world_weapon.find_child("Slide", true, false)
 	weapon.hide()
 	world_weapon.hide()
 	_update_world_weapon()
@@ -353,13 +381,7 @@ func _update_world_weapon() -> void:
 func _create_pistol(parent: Node3D, view_model: bool) -> Node3D:
 	var model := Node3D.new()
 	parent.add_child(model)
-	_piece(model, Vector3(0, 0, 0), Vector3(0.047, 0.052, 0.23), Color("363e45"), 0.65)
-	_piece(model, Vector3(0, -0.07, 0.055), Vector3(0.04, 0.11, 0.065), Color("252b2c"))
-	_piece(model, Vector3(0, 0.03, -0.09), Vector3(0.008, 0.012, 0.012), Color("bfc4bc"), 0.6)
-	_piece(model, Vector3(0, 0.028, 0.09), Vector3(0.037, 0.008, 0.015), Color("181e21"), 0.6)
-	_piece(model, Vector3(0.024, 0.007, 0.015), Vector3(0.002, 0.019, 0.04), Color("151a1c"), 0.7)
-	_piece(model, Vector3(0, -0.058, -0.013), Vector3(0.019, 0.009, 0.07), Color("252b2c"), 0.5)
-	_piece(model, Vector3(0, -0.041, -0.045), Vector3(0.019, 0.043, 0.009), Color("252b2c"), 0.5)
+	model.add_child(preload("res://town/player/service_pistol.glb").instantiate())
 	if view_model:
 		_piece(model, Vector3(0.014, -0.083, 0.065), Vector3(0.067, 0.09, 0.072), Color("bb8e74"))
 		_piece(model, Vector3(0.025, -0.16, 0.13), Vector3(0.09, 0.14, 0.18), Color("424d55"))

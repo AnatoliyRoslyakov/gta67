@@ -10,7 +10,11 @@ var model_scene: PackedScene
 var model: Node3D
 var motion: RefCounted
 var idle_time := 0.0
-var crossing_junction := -1
+var crossing_junction := -1:
+	set(value):
+		if value == crossing_junction: return
+		world.crossing_changed(crossing_junction, value)
+		crossing_junction = value
 var flee_time := 0.0
 var fear_origin := Vector3.ZERO
 var health := 100.0
@@ -21,6 +25,9 @@ var animation_elapsed := 0.0
 var animation_interval := 1.0 / 30.0
 var animation_lod_timer := 0.0
 var _sensor_tick := 0.0
+var _walk_direction := Vector3.ZERO
+var _desired_speed := 0.0
+var _can_walk := false
 var _obstructed := false
 var _obstacle_ray: PhysicsRayQueryParameters3D
 var _crossing_target := -1
@@ -56,6 +63,10 @@ func _ready() -> void:
 	_sensor_tick = phase_offset / 12.0
 
 
+func _exit_tree() -> void:
+	if is_instance_valid(world): crossing_junction = -1
+
+
 func _choose_next() -> void:
 	_sensor_tick = 0.0
 	_crossing_target = -1
@@ -78,6 +89,29 @@ func _physics_process(delta: float) -> void:
 	idle_time = maxf(0, idle_time - delta)
 	flee_time = maxf(0, flee_time - delta)
 	knockdown = maxf(0, knockdown - delta)
+	_sensor_tick -= delta
+	if _sensor_tick <= 0.0:
+		_plan_walk()
+		_sensor_tick += 1.0 / 12.0
+	velocity.x = move_toward(velocity.x, _walk_direction.x * _desired_speed, delta * 6)
+	velocity.z = move_toward(velocity.z, _walk_direction.z * _desired_speed, delta * 6)
+	if not is_on_floor(): velocity.y -= 20 * delta
+	else: velocity.y = 0
+	if not is_on_floor() or not velocity.is_zero_approx(): move_and_slide()
+	var actual_speed := Vector2(velocity.x, velocity.z).length()
+	if actual_speed > 0.1: rotation.y = lerp_angle(rotation.y, atan2(_walk_direction.x, _walk_direction.z), minf(delta * 6, 1))
+	_update_animation(delta, actual_speed)
+	model.rotation.z = lerpf(model.rotation.z, 1.4 if knockdown > 0 or health <= 0 else 0.0, minf(delta * 6, 1))
+	if actual_speed < 0.1 and (_can_walk or _obstructed) and health > 0 and knockdown <= 0:
+		blocked_time += delta
+		if blocked_time > 3 and crossing_junction < 0:
+			previous_cell = target_cell
+			_choose_next()
+			blocked_time = 0
+	else: blocked_time = 0
+
+
+func _plan_walk() -> void:
 	var target: Vector3 = world.walk_position(target_cell)
 	var offset := Vector3(target.x - global_position.x, 0, target.z - global_position.z)
 	if offset.length() < 0.3:
@@ -89,37 +123,19 @@ func _physics_process(delta: float) -> void:
 		_choose_next()
 		target = world.walk_position(target_cell)
 		offset = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
-	var can_walk := idle_time <= 0 and knockdown <= 0 and health > 0
+	_can_walk = idle_time <= 0 and knockdown <= 0 and health > 0
 	if crossing_junction < 0 and _crossing_target >= 0:
-		if not world.may_cross(cell, target_cell): can_walk = false
-		elif can_walk: crossing_junction = _crossing_target
-	var direction := offset.normalized()
-	var desired_speed := walk_speed * (2.6 if flee_time > 0 else 1.0)
-	_sensor_tick -= delta
-	if can_walk and _sensor_tick <= 0.0:
-		_sensor_tick = 1.0 / 12.0
-		var stopping_distance := desired_speed * desired_speed / 12.0 + desired_speed / 12.0 + 0.35
+		if not world.may_cross(cell, target_cell): _can_walk = false
+		elif _can_walk: crossing_junction = _crossing_target
+	_walk_direction = offset.normalized()
+	_desired_speed = walk_speed * (2.6 if flee_time > 0 else 1.0)
+	if _can_walk:
+		var stopping_distance := _desired_speed * _desired_speed / 12.0 + _desired_speed / 12.0 + 0.35
 		_obstacle_ray.from = global_position + Vector3.UP
-		_obstacle_ray.to = _obstacle_ray.from + direction * maxf(0.9, stopping_distance)
+		_obstacle_ray.to = _obstacle_ray.from + _walk_direction * maxf(0.9, stopping_distance)
 		_obstructed = not get_world_3d().direct_space_state.intersect_ray(_obstacle_ray).is_empty()
-	if _obstructed: can_walk = false
-	if not can_walk: desired_speed = 0
-	velocity.x = move_toward(velocity.x, direction.x * desired_speed, delta * 6)
-	velocity.z = move_toward(velocity.z, direction.z * desired_speed, delta * 6)
-	if not is_on_floor(): velocity.y -= 20 * delta
-	else: velocity.y = 0
-	move_and_slide()
-	var actual_speed := Vector2(velocity.x, velocity.z).length()
-	if actual_speed > 0.1: rotation.y = lerp_angle(rotation.y, atan2(direction.x, direction.z), minf(delta * 6, 1))
-	_update_animation(delta, actual_speed)
-	model.rotation.z = lerpf(model.rotation.z, 1.4 if knockdown > 0 or health <= 0 else 0.0, minf(delta * 6, 1))
-	if actual_speed < 0.1 and (can_walk or _obstructed) and health > 0 and knockdown <= 0:
-		blocked_time += delta
-		if blocked_time > 3 and crossing_junction < 0:
-			previous_cell = target_cell
-			_choose_next()
-			blocked_time = 0
-	else: blocked_time = 0
+	if _obstructed: _can_walk = false
+	if not _can_walk: _desired_speed = 0
 
 
 func _update_animation(delta: float, actual_speed: float) -> void:
@@ -134,9 +150,12 @@ func _update_animation(delta: float, actual_speed: float) -> void:
 		animation_interval = 1.0 / 60.0 if distance_squared < 400.0 else (1.0 / 30.0 if distance_squared < 3025.0 else 1.0 / 15.0)
 		var camera := get_viewport().get_camera_3d()
 		if distance_squared >= 400.0 and camera != null and not camera.is_position_in_frustum(global_position + Vector3.UP):
-			animation_interval = 0.1 if distance_squared < 1600.0 else 0.2
+			animation_interval = 0.1 if distance_squared < 1600.0 else INF
 		if previous_interval > 0.09 and animation_interval < 0.09:
 			motion._clear_foot_locks()
+	if is_inf(animation_interval):
+		animation_elapsed = 0.0
+		return
 	# The idle pose has no advancing gait; avoid resolving all four IK chains again.
 	if actual_speed < 0.01 and float(motion.get("blend")) <= 0.001:
 		animation_elapsed = 0.0
@@ -156,6 +175,7 @@ func flee(origin: Vector3) -> void:
 func receive_hit(amount: float, direction: Vector3) -> void:
 	health = maxf(0, health - amount)
 	knockdown = 4
+	_sensor_tick = 0.0
 	velocity += direction * 2
 	# Preserve a live crossing reservation until a fallen pedestrian recovers.
 	if health <= 0:

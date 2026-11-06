@@ -11,7 +11,7 @@ var world: Node3D
 var motor: AudioStreamPlayer3D
 var horn: AudioStreamPlayer3D
 var speech: AudioStreamPlayer3D
-var paper := GPUParticles3D.new()
+var paper := CPUParticles3D.new()
 var lines: Array[AudioStream] = []
 var timer := 0.0
 var horn_wait := 4.0
@@ -50,30 +50,27 @@ func _voice(radius: float, gain: float) -> AudioStreamPlayer3D:
 	return voice
 
 func _make_paper() -> void:
-	var material := ParticleProcessMaterial.new()
-	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	material.emission_box_extents = Vector3(12, 0.6, 12)
-	material.direction = Vector3(1, 0.15, 0.3)
-	material.spread = 24
-	material.initial_velocity_min = 0.6
-	material.initial_velocity_max = 1.8
-	material.gravity = Vector3(0, -0.09, 0)
-	material.angular_velocity_min = -130
-	material.angular_velocity_max = 130
-	material.particle_flag_rotate_y = true
+	paper.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	paper.emission_box_extents = Vector3(12, 0.6, 12)
+	paper.direction = Vector3(1, 0.15, 0.3)
+	paper.spread = 24
+	paper.initial_velocity_min = 0.6
+	paper.initial_velocity_max = 1.8
+	paper.gravity = Vector3(0, -0.09, 0)
+	paper.angular_velocity_min = -130
+	paper.angular_velocity_max = 130
+	paper.particle_flag_rotate_y = true
 	var sheet := QuadMesh.new()
 	sheet.size = Vector2(0.12, 0.075)
 	var tint := StandardMaterial3D.new()
 	tint.albedo_color = Color("ac966c")
 	tint.cull_mode = BaseMaterial3D.CULL_DISABLED
 	sheet.material = tint
-	paper.draw_pass_1 = sheet
-	paper.process_material = material
+	paper.mesh = sheet
 	paper.amount = 32
 	paper.fixed_fps = 20
 	paper.lifetime = 4
 	paper.local_coords = false
-	paper.visibility_aabb = AABB(Vector3(-16,-4,-16),Vector3(40,10,40))
 	paper.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(paper)
 
@@ -86,7 +83,9 @@ func _process(delta: float) -> void:
 	var origin: Vector3 = world.subject.global_position
 	paper.global_position = origin + Vector3.UP
 	var budget: int = [8, 20, 32][CityPerformance.quality]
-	if paper.amount != budget: paper.amount = budget
+	if paper.amount != budget:
+		paper.amount = budget
+		paper.fixed_fps = 12 if CityPerformance.quality == 0 else 20
 	var closest: CharacterBody3D
 	var best := 900.0
 	for car in world.nearby_drivers(origin, 32.0):

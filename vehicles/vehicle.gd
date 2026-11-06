@@ -15,11 +15,16 @@ var desired_engine_pitch := 0.6
 var is_compatibility := false
 var impact_cooldown := 0.0
 var drive_condition := 1.0
+var traffic_contacts := {}
+var wheels: Array[VehicleWheel3D] = []
+var _drive_force := 0.0
 var _damage_cooldown := 0.0
 
 
 func _ready() -> void:
 	is_compatibility = RenderingServer.get_current_rendering_method() == "gl_compatibility"
+	for child in get_children():
+		if child is VehicleWheel3D: wheels.append(child)
 	contact_monitor = true
 	max_contacts_reported = 12
 	collision_mask = 1 | 2 | 4 | 8
@@ -28,7 +33,8 @@ func _ready() -> void:
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_damage_cooldown = maxf(0.0, _damage_cooldown - state.step)
-	if _damage_cooldown > 0: return
+
+	traffic_contacts.clear()
 	var strongest := 0.0
 	var own_closing_speed := 0.0
 	var hit_body: Node
@@ -41,11 +47,25 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		var closing_speed := maxf(0.0, -relative.dot(normal))
 		var strength := absf(state.get_contact_impulse(index).dot(normal)) / maxf(mass, 1.0)
 		strength = maxf(strength, closing_speed)
+		var collider := state.get_contact_collider_object(index)
+		if strength > 1.5 and collider and collider.has_method("receive_contact"):
+			var point := state.get_contact_collider_position(index)
+			if not traffic_contacts.has(collider):
+				traffic_contacts[collider] = {"center": Vector3.ZERO, "push": Vector3.ZERO, "weight": 0.0, "peak": 0.0}
+			var patch: Dictionary = traffic_contacts[collider]
+			patch.center += point * strength
+			patch.push -= normal * strength
+			patch.weight += strength
+			patch.peak = maxf(patch.peak, strength)
 		if strength > strongest:
 			strongest = strength
 			own_closing_speed = maxf(0.0, -own_velocity.dot(normal))
 			hit_body = state.get_contact_collider_object(index) as Node
-	if strongest > 2.5:
+	for target in traffic_contacts:
+		var patch: Dictionary = traffic_contacts[target]
+		var kick: Vector3 = patch.push.normalized() * minf(patch.peak * 0.65, 12.0)
+		target.call_deferred("receive_contact", kick, patch.center / patch.weight, get_instance_id())
+	if strongest > 2.5 and _damage_cooldown <= 0:
 		_damage_cooldown = 0.7
 		collision_impact.emit.call_deferred(strongest, hit_body, own_closing_speed)
 
@@ -56,6 +76,7 @@ func receive_hit(amount: float, _direction: Vector3) -> void:
 
 func set_controlled(value: bool) -> void:
 	controllable = value
+	_drive_force = 0.0
 	engine_force = 0.0
 	brake = 0.0 if value else 35.0 * mass / 1400.0
 	constant_force = Vector3.ZERO
@@ -126,10 +147,15 @@ func _physics_process(delta: float) -> void:
 		brake = maxf(brake, 16.0)
 	else:
 		engine_force *= lerpf(0.45, 1.0, clampf(drive_condition / 0.5, 0.0, 1.0))
+	_drive_force = move_toward(_drive_force, engine_force, engine_force_value * delta * (7.0 if absf(engine_force) < absf(_drive_force) else 3.5))
+	if brake > 0.0 or drive_condition <= 0.0: _drive_force = 0.0
+	engine_force = _drive_force
 	# Grounded aerodynamic load, capped to prevent suspension bottoming at speed.
 	var grounded := false
-	for child in get_children():
-		if child is VehicleWheel3D and child.is_in_contact(): grounded = true
+	for wheel in wheels:
+		if wheel.is_in_contact():
+			grounded = true
+			break
 	constant_force = -global_basis.y * minf(speed * speed * 2.5, mass * 3.0) if grounded else Vector3.ZERO
 	desired_engine_pitch = 0.55 + minf(speed / 30.0, 1.3) + throttle * 0.15
 	$EngineSound.pitch_scale = lerpf($EngineSound.pitch_scale, desired_engine_pitch, 1 - exp(-delta * 5))

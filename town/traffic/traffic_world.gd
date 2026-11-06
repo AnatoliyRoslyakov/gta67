@@ -27,6 +27,7 @@ var signals: Array[Node3D] = []
 var drivers: Array[CharacterBody3D] = []
 var citizens: Array[CharacterBody3D] = []
 var parked_count := 0
+var _signal_second := -1
 var elapsed := 0.0
 var initialized := false
 var rng := RandomNumberGenerator.new()
@@ -68,6 +69,7 @@ func _initialize() -> void:
 	_extract_surfaces()
 	_build_lanes()
 	_build_junctions()
+	_crossing_occupancy.resize(junctions.size())
 	_build_walkways()
 	_organize_parked_cars()
 	await get_tree().physics_frame
@@ -80,16 +82,21 @@ func _initialize() -> void:
 
 func _physics_process(delta: float) -> void:
 	elapsed += delta
+	var second := floori(fmod(elapsed, 58.0))
+	if second != _signal_second:
+		_signal_second = second
+		for signal_head in signals: signal_head.show_phase(second)
 	_driver_index_tick -= delta
 	if _driver_index_tick <= 0.0:
 		_driver_index_tick += DRIVER_INDEX_INTERVAL
 		_rebuild_driver_index()
-	_crossing_occupancy.resize(junctions.size())
-	_crossing_occupancy.fill(0)
-	for person in citizens:
-		var crossing: int = person.crossing_junction
-		if crossing >= 0 and crossing < _crossing_occupancy.size(): _crossing_occupancy[crossing] += 1
-	for index in junctions.size(): _refresh_junction(index)
+	for index in junctions.size():
+		if junctions[index].owner != null: _refresh_junction(index)
+
+
+func crossing_changed(previous: int, current: int) -> void:
+	if previous >= 0: _crossing_occupancy[previous] -= 1
+	if current >= 0: _crossing_occupancy[current] += 1
 
 
 func _rebuild_driver_index() -> void:
@@ -289,8 +296,37 @@ func _organize_parked_cars() -> void:
 			# The asset showcase parks display cars in active lanes; replace those with moving traffic.
 			car.free()
 		else:
-			car.add_to_group("parked_vehicles")
+			if car is MeshInstance3D: _park_car(car)
 			parked_count += 1
+
+
+# One sleeping convex body replaces the showcase model's per-wheel static
+# colliders and concave body. A collision can wake and displace the whole car.
+func _park_car(car: MeshInstance3D) -> void:
+	var pose := car.global_transform.orthonormalized()
+	var body := RigidBody3D.new()
+	body.mass = 1850 if "Van" in str(car.name) or "Ambo" in str(car.name) else 1350
+	body.linear_damp = 1.1
+	body.angular_damp = 2.0
+	body.collision_layer = 4
+	body.collision_mask = 1 | 2 | 4 | 8
+	for old_body in car.find_children("*", "StaticBody3D", true, false): old_body.free()
+	var bounds: AABB = pose.affine_inverse() * car.global_transform * car.get_aabb()
+	for wheel: MeshInstance3D in car.find_children("*Wheel_*", "MeshInstance3D", true, false):
+		var wheel_bounds: AABB = pose.affine_inverse() * wheel.global_transform * wheel.get_aabb()
+		bounds = bounds.merge(wheel_bounds)
+	var collider := CollisionShape3D.new()
+	var hull := BoxShape3D.new()
+	hull.size = bounds.size * Vector3(0.88, 1.0, 0.93)
+	collider.shape = hull
+	collider.position = bounds.get_center()
+	body.add_child(collider)
+	car.get_parent().add_child(body)
+	body.global_transform = pose
+	car.reparent(body)
+	body.add_to_group("parked_vehicles")
+	body.sleeping = true
+	body.reset_physics_interpolation()
 
 
 func _spawn_population() -> void:

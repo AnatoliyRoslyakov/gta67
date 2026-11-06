@@ -4,7 +4,8 @@ const MAP_SCALE := 1.15
 const CENTER := Vector2(100, 100)
 const MAP_RECT := Rect2(0, 0, 200, 200)
 var player_body: Node3D
-var footprints: Array[Dictionary] = []
+var map_texture: ImageTexture
+var map_origin := Vector2.ZERO
 var navigation: Dictionary = {}
 
 
@@ -15,7 +16,6 @@ func set_navigation(state: Dictionary) -> void:
 
 func configure(city: Node3D, vehicle: Node3D) -> void:
 	player_body = vehicle
-	footprints.clear()
 	var layers: Array[Array] = [[], [], []]
 	var seen: Dictionary = {}
 	for node in city.find_children("*", "MeshInstance3D", true, false):
@@ -34,7 +34,19 @@ func configure(city: Node3D, vehicle: Node3D) -> void:
 		if seen.has(key): continue
 		seen[key] = true
 		layers[layer].append({"rect": rect, "layer": layer})
-	for layer in layers: footprints.append_array(layer)
+	var bounds := Rect2()
+	for layer in layers:
+		for item in layer: bounds = bounds.merge(item.rect)
+	map_origin = bounds.position.floor()
+	var pixels := Vector2i(((bounds.end - map_origin) * MAP_SCALE).ceil())
+	var baked := Image.create_empty(maxi(1, pixels.x), maxi(1, pixels.y), false, Image.FORMAT_RGB8)
+	baked.fill(Color("344c49"))
+	var colors := [Color("667473"), Color("a0aaaa"), Color("263b43")]
+	for layer in layers:
+		for item in layer:
+			var area: Rect2 = item.rect
+			baked.fill_rect(Rect2i(Vector2i(((area.position - map_origin) * MAP_SCALE).floor()), Vector2i((area.size * MAP_SCALE).ceil())), colors[item.layer])
+	map_texture = ImageTexture.create_from_image(baked)
 	queue_redraw()
 
 
@@ -42,11 +54,11 @@ func _draw() -> void:
 	draw_rect(MAP_RECT, Color("344c49"))
 	if is_instance_valid(player_body):
 		var origin := Vector2(player_body.global_position.x, player_body.global_position.z)
-		var colors := [Color("667473"), Color("a0aaaa"), Color("263b43")]
-		for footprint in footprints:
-			var world_rect: Rect2 = footprint.rect
-			var rect := Rect2((world_rect.position - origin) * MAP_SCALE + CENTER, world_rect.size * MAP_SCALE)
-			if rect.intersects(MAP_RECT): draw_rect(rect.intersection(MAP_RECT), colors[footprint.layer])
+		if map_texture:
+			var source := Rect2((origin - map_origin) * MAP_SCALE - CENTER, MAP_RECT.size)
+			var clipped := source.intersection(Rect2(Vector2.ZERO, map_texture.get_size()))
+			if clipped.has_area():
+				draw_texture_rect_region(map_texture, Rect2(clipped.position - source.position, clipped.size), clipped)
 		_draw_navigation(origin)
 		var forward := player_body.global_basis.z
 		if player_body is CharacterBody3D:

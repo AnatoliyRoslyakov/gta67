@@ -1,15 +1,30 @@
 extends Node3D
 
+static var lens_mesh: SphereMesh
+static var lens_finishes: Array[StandardMaterial3D] = []
 var world: Node3D
 var junction_index := 0
 var lamps: Array[Array] = []
 var pedestrian_labels: Array[Label3D] = []
-var _last_second := -1
 var _last_light_states := PackedInt32Array([-1, -1, -1, -1])
 var _last_walk_state := -1
 
 
 func _ready() -> void:
+	if lens_mesh == null:
+		lens_mesh = SphereMesh.new()
+		lens_mesh.radial_segments = 12
+		lens_mesh.rings = 5
+		lens_mesh.radius = 0.135
+		lens_mesh.height = 0.27
+		for color: Color in [Color("ff4438"), Color("ffc040"), Color("38e79b")]:
+			for active in [false, true]:
+				var finish := StandardMaterial3D.new()
+				finish.albedo_color = color if active else color.darkened(0.88)
+				finish.emission_enabled = active
+				finish.emission = color
+				finish.emission_energy_multiplier = 4.2
+				lens_finishes.append(finish)
 	for direction in 4:
 		var axis: Vector2i = world.DIRECTIONS[direction]
 		var forward := Vector3(axis.x, 0, axis.y)
@@ -23,18 +38,12 @@ func _ready() -> void:
 		var row: Array = []
 		for i in 3:
 			var lens := MeshInstance3D.new()
-			var sphere := SphereMesh.new()
-			sphere.radius = 0.135
-			sphere.height = 0.27
-			lens.mesh = sphere
+			lens.mesh = lens_mesh
 			lens.position = Vector3(0, 4.7 - i * 0.43, 0.22)
-			var material := StandardMaterial3D.new()
-			material.albedo_color = [Color("e84a43"), Color("eeb649"), Color("56d796")][i]
-			material.emission_enabled = true
-			material.emission = material.albedo_color
-			lens.material_override = material
+			lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			lens.material_override = lens_finishes[i * 2]
 			head.add_child(lens)
-			row.append(material)
+			row.append(lens)
 		lamps.append(row)
 		_box(head, Vector3(0, 2.6, 0.12), Vector3(0.64, 0.40, 0.22), Color("151c21"))
 		var sign := Label3D.new()
@@ -45,20 +54,16 @@ func _ready() -> void:
 		head.add_child(sign)
 		pedestrian_labels.append(sign)
 
+	show_phase(floori(fmod(world.elapsed, 58.0)))
 
-func _process(_delta: float) -> void:
-	# Every phase boundary is an integer second. Materials change only at a boundary.
-	var second := floori(fmod(world.elapsed, 58.0))
-	if second == _last_second: return
-	_last_second = second
+
+func show_phase(second: int) -> void:
 	for direction in 4:
 		var active: int = world.light_state(junction_index, direction)
 		if active == _last_light_states[direction]: continue
 		_last_light_states[direction] = active
 		for i in 3:
-			var material: StandardMaterial3D = lamps[direction][i]
-			material.emission_energy_multiplier = 3.5 if active == i else 0
-			material.albedo_color = material.emission if active == i else material.emission.darkened(0.88)
+			lamps[direction][i].material_override = lens_finishes[i * 2 + int(active == i)]
 	var walk := second >= 30 and second < 36
 	if int(walk) == _last_walk_state: return
 	_last_walk_state = int(walk)

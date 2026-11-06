@@ -10,6 +10,7 @@ var finger_directions: Dictionary = {}
 var inverse_bone_basis: Dictionary = {}
 var phase := 0.0
 var blend := 0.0
+var gait_run := 0.0
 var weapon_blend := 0.0
 var base_position := Vector3.ZERO
 var hip_position := Vector3.ZERO
@@ -58,7 +59,8 @@ func update(delta: float, speed: float, running := false, armed := false, aim_pi
 	if not is_instance_valid(skeleton): return
 	blend = move_toward(blend, clampf(speed / 0.45, 0.0, 1.0), delta * 5.0)
 	weapon_blend = move_toward(weapon_blend, 1.0 if armed else 0.0, delta * 6.0)
-	var run_mix := clampf((speed - 2.0) / 3.0, 0.0, 1.0) if running else 0.0
+	gait_run = move_toward(gait_run, clampf((speed - 2.0) / 3.0, 0.0, 1.0) if running else 0.0, delta * 3.5)
+	var run_mix := gait_run
 	var step_length := lerpf(0.72, 0.82, run_mix)
 	var stance_fraction := lerpf(0.60, 0.28, run_mix)
 	# A planted foot travels back through exactly the distance the body advances.

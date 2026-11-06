@@ -54,6 +54,8 @@ var _probe_last_hour := -100.0
 var _probe_last_light := Vector2(-1.0, -1.0)
 var _probe_nudge := 1.0
 var _lamp_lens_transforms: Array[Transform3D] = []
+var _window_signs := 0
+var _window_letters: Array[TextMesh] = []
 var _lamp_lenses: MultiMeshInstance3D
 
 
@@ -183,7 +185,7 @@ func _apply_time(force := false) -> void:
 	_moon.visible = _night_amount > 0.01
 	if _moon.visible:
 		_moon.rotation_degrees = Vector3(-48.0, 55.0 + time_of_day * 6.0, 0)
-		_moon.light_energy = _night_amount * 0.24
+		_moon.light_energy = _night_amount * 0.47
 	var palette := Vector2(daylight, golden)
 	# Constant noon/night colours must not repeatedly invalidate the sky radiance map.
 	if force or palette.distance_squared_to(_last_palette) > 0.000004:
@@ -195,7 +197,7 @@ func _apply_time(force := false) -> void:
 		_sky_material.ground_bottom_color = Color("192331").lerp(Color("626669"), daylight)
 		_sky_material.energy_multiplier = lerpf(0.65, 1.0, daylight)
 		_environment.ambient_light_color = Color("8092c2").lerp(Color("b4c4db"), daylight)
-		_environment.ambient_light_energy = lerpf(0.18, 0.48, daylight)
+		_environment.ambient_light_energy = lerpf(0.39, 0.48, daylight)
 		_environment.tonemap_exposure = lerpf(1.1, 0.95, daylight)
 		_environment.fog_light_color = Color("252e48").lerp(horizon, daylight)
 		_environment.fog_light_energy = lerpf(0.5, 0.85, daylight)
@@ -206,7 +208,7 @@ func _apply_time(force := false) -> void:
 	if force or absf(_night_amount - _last_material_night) > 0.002:
 		_last_material_night = _night_amount
 		for material in _emission_materials:
-			material.emission_energy_multiplier = lerpf(0.02, 1.45, _night_amount)
+			material.emission_energy_multiplier = lerpf(0.0, 2.35, _night_amount)
 		for material in _lamp_materials:
 			material.emission_energy_multiplier = lerpf(0.0, 1.15, _night_amount)
 		for material in _road_materials:
@@ -248,12 +250,57 @@ func _discover_fixtures() -> void:
 		elif mesh_name.begins_with("SM_Env_Road_Bare_") or mesh_name.begins_with("SM_Env_Road_0"):
 			_override_materials(mesh, "road", Color.WHITE)
 		elif "Glass" in mesh_name and mesh_name.begins_with("SM_Bld_"):
-			_override_materials(mesh, "glass", Color.WHITE)
+			var pos := mesh.global_position
+			var district_tint: Color = [Color("eeb57c"), Color("9bc9d7"), Color("f4dcad"), Color("3e526a")][posmod(hash(Vector2i(roundi(pos.x), roundi(pos.z))), 4)]
+			_override_materials(mesh, "glass", district_tint)
+			if "Shop" in mesh_name and _window_signs < 12:
+				_add_window_sign(mesh)
+
+
+# Use an actual pane as the mounting plane so lettering follows rotated shops.
+func _add_window_sign(window: MeshInstance3D) -> void:
+	var faces := window.mesh.get_faces()
+	var largest := 0.0
+	var center := Vector3.ZERO
+	var outward := Vector3.ZERO
+	for i in range(0, faces.size(), 3):
+		var a := window.global_transform * faces[i]
+		var b := window.global_transform * faces[i + 1]
+		var c := window.global_transform * faces[i + 2]
+		var normal := (c - a).cross(b - a)
+		var area := normal.length()
+		if area <= largest or absf(normal.y) > area * 0.1: continue
+		largest = area
+		outward = normal / area
+		center = (a + b + c) / 3.0
+	if largest < 1.0: return
+	if _window_letters.is_empty():
+		for word in ["OPEN", "LATE", "24 H"]:
+			var letters := TextMesh.new()
+			letters.text = word
+			letters.font_size = 36
+			letters.pixel_size = 0.009
+			letters.depth = 0.012
+			var tint: Color = [Color("ff688e"), Color("51d9ef"), Color("ffbb61")][_window_letters.size()]
+			var finish := StandardMaterial3D.new()
+			finish.albedo_color = tint
+			finish.emission_enabled = true
+			finish.emission = tint
+			letters.material = finish
+			_emission_materials.append(finish)
+			_window_letters.append(letters)
+	var sign_mesh := MeshInstance3D.new()
+	sign_mesh.mesh = _window_letters[_window_signs % _window_letters.size()]
+	sign_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sign_mesh.visibility_range_end = 75
+	add_child(sign_mesh)
+	sign_mesh.global_transform = Transform3D(Basis.looking_at(outward, Vector3.UP, true), center + outward * 0.025)
+	_window_signs += 1
 
 
 func _is_neon_sign(mesh_name: String) -> bool:
 	if not mesh_name.begins_with("SM_Prop_"): return false
-	for keyword in ["Sign_Hotel", "Sign_Cafe", "Sign_Bar_", "Sign_Pub", "Sign_Chinese", "Sign_Pizza", "Sign_DeliPizza", "LargeSign_"]:
+	for keyword in ["Sign_Hotel", "Sign_Cafe", "Sign_Bar_", "Sign_Pub", "Sign_Barber", "Sign_XXX", "Sign_Chinese", "Sign_Pizza", "Sign_DeliPizza", "LargeSign_"]:
 		if keyword in mesh_name: return true
 	return false
 
@@ -285,6 +332,9 @@ func _override_materials(mesh: MeshInstance3D, category: String, tint: Color) ->
 				material.roughness = 0.8
 				_road_materials.append(material)
 			elif category == "glass":
+				material.emission_enabled = true
+				material.emission = tint
+				_lamp_materials.append(material)
 				material.roughness = 0.15
 				material.metallic = 0.15
 			_material_cache[key] = material

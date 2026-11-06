@@ -1,11 +1,16 @@
 extends Node
 
-# Original one-shot Foley is synthesized in memory; no imported audio asset is required.
-const RATE := 24000
+const SHOTS := [
+	preload("res://town/sound/shot_0.wav"), preload("res://town/sound/shot_1.wav"),
+	preload("res://town/sound/shot_2.wav"), preload("res://town/sound/shot_3.wav")
+]
+const STEPS := [
+	preload("res://town/sound/step_0.wav"), preload("res://town/sound/step_1.wav"),
+	preload("res://town/sound/step_2.wav"), preload("res://town/sound/step_3.wav"),
+	preload("res://town/sound/step_4.wav"), preload("res://town/sound/step_5.wav")
+]
+const RELOAD := preload("res://town/sound/reload_0.wav")
 const MOODS := ["sunrise", "day", "sunset", "night"]
-static var _cached_shots: Array[AudioStreamWAV] = []
-static var _cached_steps: Array[AudioStreamWAV] = []
-static var _cached_reload: AudioStreamWAV
 static var _cached_ambience: Array[AudioStreamOggVorbis] = []
 var player: CharacterBody3D
 var atmosphere: Node
@@ -23,6 +28,7 @@ var _last_foot_phase := 0
 var _foot_cooldown := 0.0
 var _character_gain := 0.0
 var _step_volume := 0.12
+var _mix_elapsed := 0.0
 var _hour := 17.5
 var _built := false
 
@@ -45,17 +51,14 @@ func _build() -> void:
 	_built = true
 	rng.seed = 670024
 	# Streams are immutable after preparation; independent voices share their PCM.
-	if _cached_reload == null:
-		for variant in 4: _cached_shots.append(_synthesize("shot", variant))
-		for variant in 6: _cached_steps.append(_synthesize("step", variant))
-		_cached_reload = _synthesize("reload", 1)
+	if _cached_ambience.is_empty():
 		for mood in MOODS:
 			var stream := load("res://town/sound/mood_%s.ogg" % mood).duplicate() as AudioStreamOggVorbis
 			stream.loop = true
 			_cached_ambience.append(stream)
-	shots.assign(_cached_shots)
-	steps.assign(_cached_steps)
-	reload_sound = _cached_reload
+	shots.assign(SHOTS)
+	steps.assign(STEPS)
+	reload_sound = RELOAD
 	shot_voice = _voice("Gunshot", 4)
 	step_voice = _voice("Footstep", 1)
 	reload_voice = _voice("Reload", 1)
@@ -78,17 +81,21 @@ func _voice(label: String, polyphony: int) -> AudioStreamPlayer:
 
 func _process(delta: float) -> void:
 	if not _built: return
-	if is_instance_valid(atmosphere): _hour = float(atmosphere.get("time_of_day"))
-	var mood := 3
-	if _hour >= 5.5 and _hour < 8.0: mood = 0
-	elif _hour >= 8.0 and _hour < 16.5: mood = 1
-	elif _hour >= 16.5 and _hour < 20.0: mood = 2
-	for index in ambience.size():
-		var voice := ambience[index]
-		var target := 0.06 if index == mood else 0.0
-		voice.volume_linear = lerpf(voice.volume_linear, target, 1.0 - exp(-delta * 1.4))
-		if target > 0 and not voice.playing: voice.play()
-		elif target == 0 and voice.volume_linear < 0.0001 and voice.playing: voice.stop()
+	_mix_elapsed += delta
+	if _mix_elapsed >= 0.05:
+		if is_instance_valid(atmosphere): _hour = float(atmosphere.get("time_of_day"))
+		var mood := 3
+		if _hour >= 5.5 and _hour < 8.0: mood = 0
+		elif _hour >= 8.0 and _hour < 16.5: mood = 1
+		elif _hour >= 16.5 and _hour < 20.0: mood = 2
+		for index in ambience.size():
+			var voice := ambience[index]
+			var target := 0.06 if index == mood else 0.0
+			if target == 0.0 and not voice.playing: continue
+			voice.volume_linear = lerpf(voice.volume_linear, target, 1.0 - exp(-_mix_elapsed * 1.4))
+			if target > 0 and not voice.playing: voice.play()
+			elif target == 0 and voice.volume_linear < 0.0001 and voice.playing: voice.stop()
+		_mix_elapsed = 0.0
 	var active := is_instance_valid(player) and bool(player.get("active"))
 	if active or _character_gain > 0.0:
 		_character_gain = lerpf(_character_gain, 1.0 if active else 0.0, 1.0 - exp(-delta * 45.0))
@@ -153,53 +160,3 @@ func _play_step(running: bool) -> void:
 
 func _can_play() -> bool:
 	return _built and is_instance_valid(player) and bool(player.get("active"))
-
-
-func _synthesize(kind: String, variant: int) -> AudioStreamWAV:
-	var duration := 0.34 if kind == "shot" else (1.30 if kind == "reload" else 0.18)
-	var count := int(duration * RATE)
-	var samples := PackedFloat32Array()
-	samples.resize(count)
-	var noise := RandomNumberGenerator.new()
-	noise.seed = 670000 + variant * 97 + kind.hash()
-	var low := 0.0
-	var mid := 0.0
-	var peak := 0.001
-	for index in count:
-		var t := float(index) / RATE
-		var white := noise.randf_range(-1.0, 1.0)
-		low = lerpf(low, white, 0.07)
-		mid = lerpf(mid, white, 0.48)
-		var sample := 0.0
-		if kind == "shot":
-			# Broadband muzzle transient with a short, soft low-frequency body.
-			var attack := 1.0 - exp(-t * 1800.0)
-			var body := sin(TAU * (115.0 * t - 65.0 * t * t)) * exp(-t * 42.0)
-			sample = attack * ((mid - low) * exp(-t * 34.0) + low * exp(-t * 14.0) * 0.32 + body * 0.24)
-		elif kind == "step":
-			# Heel then sole: damped contact and texture, with no sustained oscillator.
-			for contact in [0.0, 0.043]:
-				var age: float = t - contact
-				if age >= 0.0:
-					var envelope := (1.0 - exp(-age * 800.0)) * exp(-age * 65.0)
-					sample += envelope * (low * 1.4 + mid * 0.24 + sin(TAU * (90.0 + variant * 5.0) * age) * 0.18)
-		else:
-			# Magazine release, insertion and slide movement; each contact has a soft attack.
-			for contact in [0.04, 0.58, 1.04, 1.13]:
-				var age: float = t - contact
-				if age >= 0.0 and age < 0.15:
-					var envelope := (1.0 - exp(-age * 1100.0)) * exp(-age * 70.0)
-					sample += envelope * ((mid - low) * 0.7 + low * 0.5 + sin(TAU * 1250.0 * age) * exp(-age * 85.0) * 0.08)
-		# Sample-accurate fades prevent discontinuities at both ends of every buffer.
-		sample *= clampf(t / 0.002, 0.0, 1.0) * clampf((duration - t) / 0.015, 0.0, 1.0)
-		samples[index] = sample
-		peak = maxf(peak, absf(sample))
-	var pcm := PackedByteArray()
-	pcm.resize(count * 2)
-	for index in count: pcm.encode_s16(index * 2, int(samples[index] / peak * 26000.0))
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = RATE
-	stream.stereo = false
-	stream.data = pcm
-	return stream

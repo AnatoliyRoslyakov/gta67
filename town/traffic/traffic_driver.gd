@@ -1,6 +1,12 @@
 extends CharacterBody3D
 
 static var lamp_mesh_cache: Dictionary = {}
+var slide_velocity := Vector3.ZERO
+var spin_rate := 0.0
+var _plan_target := Vector3.ZERO
+var _plan_speed := 0.0
+var _plan_turn := false
+var _contact_timers: Dictionary = {}
 var body_faces := PackedVector3Array()
 var body_bounds := AABB()
 
@@ -48,7 +54,7 @@ func _ready() -> void:
 	_traffic_ray = PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()])
 	for side in 2:
 		_side_rays.append(PhysicsRayQueryParameters3D.create(Vector3.ZERO, Vector3.ZERO, 1 | 2 | 4 | 8, [get_rid()]))
-	_traffic_sensor_tick = float(get_instance_id() % 6) / 120.0
+	_traffic_sensor_tick = -float(get_instance_id() % 6) / 120.0
 	_traffic_visual_elapsed = float(get_instance_id() % 4) / 120.0
 	model = model_scene.instantiate()
 	_remove_physics(model)
@@ -96,8 +102,6 @@ func _ready() -> void:
 			finish.metallic = 0.15
 			finish.roughness = 0.4
 			body_mesh.set_surface_override_material(surface, finish)
-	body_faces = body_mesh.mesh.get_faces()
-	for index in body_faces.size(): body_faces[index] = model.transform * body_faces[index]
 	var lamp_height := 0.72
 	var tail_height := 0.83
 	var tail_width_fraction := 0.27
@@ -124,6 +128,7 @@ func _ready() -> void:
 		headlights.append(_lamp(Vector2(x, lamp_height), true, Color("fff0ce")))
 		var turn_x: float = body_bounds.get_center().x + side * float(model.get_meta("turn_light_half_width", body_bounds.size.x * 0.34))
 		turn_lights.append(_lamp(Vector2(turn_x, float(model.get_meta("turn_light_height", lamp_height))), true, Color("e99a31"), Vector2(0.095, 0.07)))
+	body_faces.clear()
 	headlight_beam = SpotLight3D.new()
 	headlight_beam.position = (headlights[0].get_aabb().get_center() + headlights[1].get_aabb().get_center()) * 0.5 + Vector3(0, 0, 0.08)
 	headlight_beam.rotation = Vector3(-0.07, PI, 0)
@@ -147,21 +152,26 @@ func _physics_process(delta: float) -> void:
 		next_state = following_state
 		following_state = world.choose_lane(next_state)
 		_traffic_sensor_tick = 0.0
-	var target := _driving_target(following_state)
-	var direction := (target - global_position).normalized()
-	var desired := cruise_speed
-	if following_state == next_state:
-		desired = minf(desired, sqrt(maxf(0, 6.0 * (global_position.distance_to(world.lane_position(next_state)) - 1.0))))
-	if state == next_state: desired = 0.0
-	var turning := _is_turn(following_state)
-	if turning:
-		var approach_distance := maxf(0.0, global_position.distance_to(world.lane_position(next_state)) - 4.5)
-		desired = minf(desired, sqrt(9.0 + 4.5 * approach_distance))
-	desired = minf(desired, world.approach_speed(self, state, next_state))
 	_traffic_sensor_tick -= delta
 	if _traffic_sensor_tick <= 0.0:
 		_traffic_sensor_tick += 0.05
+		var target := _driving_target(following_state)
+		var direction := (target - global_position).normalized()
+		var desired := cruise_speed
+		if following_state == next_state:
+			desired = minf(desired, sqrt(maxf(0, 6.0 * (global_position.distance_to(world.lane_position(next_state)) - 1.0))))
+		if state == next_state: desired = 0.0
+		var turning := _is_turn(following_state)
+		if turning:
+			var approach_distance := maxf(0.0, global_position.distance_to(world.lane_position(next_state)) - 4.5)
+			desired = minf(desired, sqrt(9.0 + 4.5 * approach_distance))
+		desired = minf(desired, world.approach_speed(self, state, next_state))
 		_traffic_obstacle_speed = _sense_obstacles(direction, maxf(9, speed * 2.2))
+		_plan_speed = desired
+		_plan_target = target
+		_plan_turn = turning
+	var desired := _plan_speed
+	var turning := _plan_turn
 	if desired > 1.5 and _traffic_obstacle_speed < 0.6 and speed < 0.8 and damage < 70:
 		blocked_seconds += delta
 	else:
@@ -173,7 +183,7 @@ func _physics_process(delta: float) -> void:
 		queue_release_delay -= delta
 		desired = 0.0
 	if damage > 70: desired = 0
-	var braking := _drive_toward(target, desired, delta)
+	var braking := _drive_toward(_plan_target, desired, delta)
 	_traffic_visual_elapsed += delta
 	if _traffic_visual_elapsed + 0.000001 >= _traffic_visual_interval:
 		_traffic_visual_elapsed = fmod(_traffic_visual_elapsed, _traffic_visual_interval)
@@ -247,6 +257,7 @@ func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
 	offset.y = 0
 	var error := angle_difference(rotation.y, atan2(offset.x, offset.z))
 	var requested := clampf(atan2(2.0 * wheelbase * sin(error), maxf(offset.length(), 1.0)), -1.2, 1.2)
+	if absf(error) > PI * 0.7: requested = signf(error) * 1.05
 	steering_angle = move_toward(steering_angle, requested, delta * 1.8)
 	# Bicycle steering: the velocity and body share a heading, including in turns.
 	var curvature := absf(tan(steering_angle) / wheelbase)
@@ -255,12 +266,27 @@ func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
 	var braking := desired < speed - 0.3
 	speed = move_toward(speed, desired, delta * (6.5 if braking else acceleration))
 	var yaw_rate := speed / wheelbase * tan(steering_angle)
-	rotation.y += yaw_rate * delta
-	velocity.x = global_basis.z.x * speed
-	velocity.z = global_basis.z.z * speed
+	rotation.y += (yaw_rate + spin_rate) * delta
+	velocity.x = global_basis.z.x * speed + slide_velocity.x
+	velocity.z = global_basis.z.z * speed + slide_velocity.z
 	velocity.y = velocity.y - 20.0 * delta if not is_on_floor() else 0.0
+	var incoming := velocity
 	move_and_slide()
-	speed = maxf(0.0, velocity.dot(global_basis.z))
+	slide_velocity = slide_velocity.move_toward(Vector3.ZERO, 5.5 * delta)
+	spin_rate = move_toward(spin_rate, 0.0, 2.6 * delta)
+	for i in get_slide_collision_count():
+		var hit := get_slide_collision(i)
+		var normal := hit.get_normal()
+		if absf(normal.y) > 0.65: continue
+		var other := hit.get_collider() as CollisionObject3D
+		var closing := -(incoming - hit.get_collider_velocity()).dot(normal)
+		if closing > 4.0 and other and other.collision_layer == 2 and other.has_method("receive_hit"):
+			other.receive_hit((closing - 3.0) * 5.0, -normal)
+		if closing > 1.5 and other and other.has_method("receive_contact"):
+			other.receive_contact(-normal * closing * 0.55, hit.get_position(), get_instance_id())
+			receive_contact(normal * closing * 0.55, hit.get_position(), other.get_instance_id())
+		if slide_velocity.dot(normal) < 0.0: slide_velocity = slide_velocity.slide(normal)
+		speed = minf(speed, maxf(0.0, velocity.dot(global_basis.z)))
 	wheel_distance += speed * delta
 	return braking
 
@@ -268,7 +294,7 @@ func _drive_toward(target: Vector3, desired: float, delta: float) -> bool:
 func _sense_obstacles(direction: Vector3, lookahead: float) -> float:
 	var limit := INF
 	var origin := global_position
-	# Braking gaps include travel between sensor samples; collision movement still runs at 120 Hz.
+	# Braking gaps include travel between sensor samples; collision movement still runs at every physics tick.
 	var reaction_margin := maxf(speed, cruise_speed) * 0.05
 	for other in world.nearby_drivers(origin, lookahead + 3.0):
 		if other == self: continue
@@ -316,6 +342,20 @@ func _update_night_lights() -> void:
 	headlight_beam.visible = nearer < 4
 
 
+func receive_contact(kick: Vector3, point: Vector3, source: int) -> void:
+	var tick := Time.get_ticks_msec()
+	if tick < int(_contact_timers.get(source, 0)): return
+	for key in _contact_timers.keys():
+		if _contact_timers[key] <= tick: _contact_timers.erase(key)
+	_contact_timers[source] = tick + 180
+	kick.y = 0
+	slide_velocity = (slide_velocity + kick).limit_length(14)
+	var lever := point - global_position
+	var inertia := maxf(1.0, (body_bounds.size.x ** 2 + body_bounds.size.z ** 2) / 12.0)
+	spin_rate = clampf(spin_rate + lever.cross(kick).y / inertia, -3.2, 3.2)
+	speed *= 1.0 - clampf(kick.length() / 22.0, 0.0, 0.65)
+
+
 func receive_hit(amount: float, _direction: Vector3) -> void:
 	damage += amount
 
@@ -326,6 +366,9 @@ func _lamp(center: Vector2, front: bool, color: Color, size: Vector2 = Vector2(0
 	# locate the bumper surface, particularly on the rounded compact model.
 	var key := "%s:%s:%s:%s" % [model_scene.resource_path, center, front, size]
 	if not lamp_mesh_cache.has(key):
+		if body_faces.is_empty():
+			body_faces = (model as MeshInstance3D).mesh.get_faces()
+			for i in body_faces.size(): body_faces[i] = model.transform * body_faces[i]
 		var vertices := PackedVector3Array()
 		var normals := PackedVector3Array()
 		var end_limit := body_bounds.get_center().z + body_bounds.size.z * (0.40 if front else -0.40)
